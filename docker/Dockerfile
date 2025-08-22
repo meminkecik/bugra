@@ -9,7 +9,7 @@ RUN npm ci
 
 # Kaynak kodları kopyalayıp build ediyoruz
 COPY . .
-RUN npm run build
+RUN npm run build:prod
 
 # Nginx stage
 FROM nginx:alpine
