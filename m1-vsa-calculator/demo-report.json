@@ -1,0 +1,45 @@
+{
+  "metadata": {
+    "timestamp": "2025-08-18T19:50:00.000Z",
+    "preset": "Takabatake",
+    "depthMode": "CUSTOM",
+    "targetDepth": "27.0 m",
+    "usedDepth": "27.0 m"
+  },
+  "input": {
+    "layers": [
+      { "id": "1", "d": 15, "vs": 146.6, "rho": 1900 },
+      { "id": "2", "d": 2, "vs": 166.6, "rho": 1900 },
+      { "id": "3", "d": 4, "vs": 305.2, "rho": 1900 },
+      { "id": "4", "d": 2, "vs": 342.2, "rho": 1900 },
+      { "id": "5", "d": 6, "vs": 472.9, "rho": 1900 }
+    ],
+    "defaultRho": 1900,
+    "showT": true
+  },
+  "results": {
+    "H": 27.0,
+    "Vsa_M1": 283.2,
+    "Vsa_M2": 251.1,
+    "Vsa_M3": 225.0,
+    "T_M1": 0.381,
+    "T_M2": 0.430,
+    "T_M3": 0.480
+  },
+  "expected": {
+    "Vsa_M1": 283,
+    "Vsa_M2": 251,
+    "Vsa_M3": 225
+  },
+  "analysis": {
+    "deviations": {
+      "M1": 0.1,
+      "M2": 0.0,
+      "M3": 0.0
+    },
+    "highDeviations": [],
+    "needsNarrowing": false,
+    "recommendation": "Sapmalar kabul edilebilir seviyede (%5'den küçük)"
+  }
+}
+
