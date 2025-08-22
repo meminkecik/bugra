@@ -1,12 +1,19 @@
-version: '3.8'
+version: "3.8"
 
 services:
   portfolio:
     container_name: bugra_web
-    image: nginx:alpine
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
     ports:
       - "15000:80"
     restart: unless-stopped
-    volumes:
-      - ./dist:/usr/share/nginx/html:ro,Z
-      - ./docker/default.conf:/etc/nginx/conf.d/default.conf:ro,Z
+    # Güvenlik için read-only root filesystem
+    read_only: true
+    # Nginx process için gerekli yazma izinleri
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+      - /var/log/nginx
+      - /var/run
