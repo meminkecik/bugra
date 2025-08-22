@@ -5,7 +5,7 @@ WORKDIR /app
 
 # Package dosyalarını kopyalayıp dependencies'i yüklüyoruz
 COPY package*.json ./
-RUN npm ci --only=production
+RUN npm ci
 
 # Kaynak kodları kopyalayıp build ediyoruz
 COPY . .
