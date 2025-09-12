@@ -1,0 +1,24 @@
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Zemin katmanları -->
+  <rect x="2" y="4" width="28" height="6" fill="#8B4513" rx="1"/>
+  <rect x="2" y="10" width="28" height="6" fill="#A0522D" rx="1"/>
+  <rect x="2" y="16" width="28" height="6" fill="#CD853F" rx="1"/>
+  <rect x="2" y="22" width="28" height="6" fill="#DEB887" rx="1"/>
+  
+  <!-- Dalga sembolleri (VSA için) -->
+  <path d="M6 8 Q8 6 10 8 T14 8" stroke="white" stroke-width="1.5" fill="none"/>
+  <path d="M6 14 Q8 12 10 14 T14 14" stroke="white" stroke-width="1.5" fill="none"/>
+  <path d="M6 20 Q8 18 10 20 T14 20" stroke="white" stroke-width="1.5" fill="none"/>
+  <path d="M6 26 Q8 24 10 26 T14 26" stroke="white" stroke-width="1.5" fill="none"/>
+  
+  <!-- Derinlik göstergesi -->
+  <line x1="26" y1="4" x2="26" y2="28" stroke="#2563EB" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <text x="27" y="17" font-family="Arial" font-size="8" fill="#2563EB" font-weight="bold">H</text>
+  
+  <!-- Ok ucu -->
+  <defs>
+    <marker id="arrowhead" markerWidth="6" markerHeight="4" refX="0" refY="2" orient="auto">
+      <polygon points="0 0, 6 2, 0 4" fill="#2563EB"/>
+    </marker>
+  </defs>
+</svg>
