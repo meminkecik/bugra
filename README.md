@@ -14,7 +14,11 @@
 - **M7**: Önerilen yeni yöntem
 
 ### 📁 Excel Entegrasyonu (Çoklu Ölçüm)
+<<<<<<< HEAD
 - **Excel Dosyası Yükleme**: .xlsx formatında 100'e kadar ölçüm verilerini yükleyin
+=======
+- **Excel Dosyası Yükleme**: .xlsx formatında 20'ye kadar ölçüm verilerini yükleyin
+>>>>>>> origin/master
 - **Excel Çıktısı**: Tüm ölçümlerin sonuçlarını Excel formatında indirin
 - **Örnek Excel**: Doğru format için örnek Excel dosyası indirin
 - **Ölçüm Navigasyonu**: Yüklenen ölçümler arasında geçiş yapın
@@ -43,7 +47,11 @@
 - Her ölçüm için bir başlık satırı ekleyin (örn: 'Saha 1')
 - Başlık satırından sonra katman verilerini girin
 - Boş satırlarla ölçümleri ayırın
+<<<<<<< HEAD
 - Maksimum 100 ölçüm desteklenir
+=======
+- Maksimum 20 ölçüm desteklenir
+>>>>>>> origin/master
 
 ### Örnek Veri Yapısı
 | Ölçüm Adı | Vs (m/s) | ρ (kg/m³) | Kalınlık (m) |
@@ -63,7 +71,11 @@
 - Vs ve Kalınlık pozitif sayı olmalıdır
 - ρ boş bırakılırsa varsayılan değer (1900 kg/m³) kullanılır
 - En az 1 katman olmalıdır
+<<<<<<< HEAD
 - Maksimum 100 ölçüm desteklenir
+=======
+- Maksimum 20 ölçüm desteklenir
+>>>>>>> origin/master
 - Her ölçüm için en az 1 katman olmalıdır
 - Derinlik modu otomatik olarak "Saha Hs (tüm profil)" olarak ayarlanır
 - Kullanıcı isterse derinlik modunu değiştirebilir

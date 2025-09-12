@@ -10,7 +10,10 @@ import {
   type Layer,
 } from "./lib/calc";
 import { PRESETS, type Preset } from "./presets";
+<<<<<<< HEAD
 import { getCombinedPresets } from "./excelPresets";
+=======
+>>>>>>> origin/master
 
 import {
   readExcelFile,
@@ -34,7 +37,10 @@ function App() {
   const [depthMode, setDepthMode] = useState<DepthMode>("VS30");
   const [customDepth, setCustomDepth] = useState<number>(30);
   const [currentPreset, setCurrentPreset] = useState<Preset | null>(null);
+<<<<<<< HEAD
   const [availablePresets, setAvailablePresets] = useState<Preset[]>(PRESETS);
+=======
+>>>>>>> origin/master
   const [deviationAnalysis, setDeviationAnalysis] = useState<any>(null);
   const [excelLoading, setExcelLoading] = useState(false);
   const [excelError, setExcelError] = useState<string | null>(null);
@@ -45,6 +51,7 @@ function App() {
     useState<number>(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+<<<<<<< HEAD
   // Excel preset'lerini yükle
   useEffect(() => {
     const loadPresets = async () => {
@@ -61,6 +68,8 @@ function App() {
     loadPresets();
   }, []);
 
+=======
+>>>>>>> origin/master
   // Hedef derinliği belirle
   const targetDepth = useMemo(() => {
     if (depthMode === "VS30") return 30;
@@ -70,8 +79,12 @@ function App() {
 
   // Sonuçları hesapla - Batch hesaplama ile aynı mantık
   const result = useMemo(() => {
+<<<<<<< HEAD
     // M1, M2 hesaplamaları için de hedef derinliği kullan
     const targetDepthM12 = targetDepth;
+=======
+    const targetDepthM12 = Number.POSITIVE_INFINITY;
+>>>>>>> origin/master
     const targetDepthM3 = targetDepth;
     const m3Mode: "TOTAL" | "TARGET" =
       depthMode === "SITE_HS" ? "TOTAL" : "TARGET"; // VS30/CUSTOM=TARGET, SITE_HS=TOTAL
@@ -132,7 +145,11 @@ function App() {
 
   // Preset değiştiğinde otomatik derinlik ayarla
   const handlePresetChange = (presetName: string) => {
+<<<<<<< HEAD
     const preset = availablePresets.find((p) => p.name === presetName);
+=======
+    const preset = PRESETS.find((p) => p.name === presetName);
+>>>>>>> origin/master
     if (!preset) return;
 
     setLayers(preset.layers);
@@ -223,6 +240,11 @@ function App() {
     setCustomDepth(Number(newDepth.toFixed(1)));
   };
 
+<<<<<<< HEAD
+=======
+
+
+>>>>>>> origin/master
   // Veri sıfırla
   const resetData = () => {
     setLayers([
@@ -260,6 +282,11 @@ function App() {
     URL.revokeObjectURL(url);
   };
 
+<<<<<<< HEAD
+=======
+
+
+>>>>>>> origin/master
   // Excel dosyası yükle
   const handleExcelUpload = async (file: File) => {
     setExcelLoading(true);
@@ -272,8 +299,13 @@ function App() {
         throw new Error("Excel dosyasında geçerli ölçüm verisi bulunamadı");
       }
 
+<<<<<<< HEAD
       if (excelData.measurements.length > 100) {
         throw new Error("Maksimum 100 ölçüm desteklenir");
+=======
+      if (excelData.measurements.length > 20) {
+        throw new Error("Maksimum 20 ölçüm desteklenir");
+>>>>>>> origin/master
       }
 
       // Excel verilerini sakla
@@ -284,10 +316,17 @@ function App() {
       const firstMeasurement = excelData.measurements[0];
       setLayers(firstMeasurement.layers);
       setDefaultRho(excelData.defaultRho);
+<<<<<<< HEAD
 
       // Otomatik olarak tüm saha profili modunu seç
       setDepthMode("SITE_HS");
 
+=======
+      
+      // Otomatik olarak tüm saha profili modunu seç
+      setDepthMode("SITE_HS");
+      
+>>>>>>> origin/master
       // Toplam derinliği hesapla ve custom depth olarak ayarla
       const totalDepth = firstMeasurement.layers.reduce(
         (sum, l) => sum + (typeof l.d === "number" ? l.d : 0),
@@ -571,6 +610,13 @@ function App() {
           </section>
         )}
 
+<<<<<<< HEAD
+=======
+
+
+
+
+>>>>>>> origin/master
         {/* Derinlik Modu Kontrolleri */}
         <section className="mb-6 rounded-lg bg-white p-6 shadow-sm">
           <h2 className="mb-4 text-xl font-semibold text-gray-900">
@@ -602,6 +648,11 @@ function App() {
                 />
               </label>
             )}
+<<<<<<< HEAD
+=======
+
+
+>>>>>>> origin/master
           </div>
         </section>
 
@@ -657,7 +708,11 @@ function App() {
                 value=""
               >
                 <option value="">Seçiniz...</option>
+<<<<<<< HEAD
                 {availablePresets.map((preset) => (
+=======
+                {PRESETS.map((preset) => (
+>>>>>>> origin/master
                   <option key={preset.name} value={preset.name}>
                     {preset.name}
                   </option>
@@ -1009,6 +1064,7 @@ function App() {
                   <strong>6. Zorunlu Alanlar:</strong> Vs ve Kalınlık mutlaka
                   doldurulmalıdır
                 </p>
+<<<<<<< HEAD
                 <p>
                   <strong>7. İsteğe Bağlı:</strong> ρ boş bırakılırsa varsayılan
                   değer (1900 kg/m³) kullanılır
@@ -1020,6 +1076,18 @@ function App() {
                   <strong>9. Derinlik Modu:</strong> Otomatik olarak "Saha Hs
                   (tüm profil)" seçilir
                 </p>
+=======
+                                 <p>
+                   <strong>7. İsteğe Bağlı:</strong> ρ boş bırakılırsa varsayılan
+                   değer (1900 kg/m³) kullanılır
+                 </p>
+                 <p>
+                   <strong>8. Maksimum:</strong> 20 ölçüm desteklenir
+                 </p>
+                 <p>
+                   <strong>9. Derinlik Modu:</strong> Otomatik olarak "Saha Hs (tüm profil)" seçilir
+                 </p>
+>>>>>>> origin/master
               </div>
             </div>
 
@@ -1107,6 +1175,7 @@ function App() {
                 <li>ρ değeri 100-5000 kg/m³ arasında olmalıdır</li>
                 <li>Toplam derinlik 1000 m'yi geçmemelidir</li>
                 <li>Vs değeri 6000 m/s'yi geçmemelidir</li>
+<<<<<<< HEAD
                 <li>Maksimum 100 ölçüm desteklenir</li>
                 <li>Her ölçüm için en az 1 katman olmalıdır</li>
                 <li>
@@ -1118,6 +1187,16 @@ function App() {
                   Örnek Excel dosyasını indirip referans olarak
                   kullanabilirsiniz
                 </li>
+=======
+                                 <li>Maksimum 20 ölçüm desteklenir</li>
+                 <li>Her ölçüm için en az 1 katman olmalıdır</li>
+                 <li>Derinlik modu otomatik olarak "Saha Hs (tüm profil)" olarak ayarlanır</li>
+                 <li>Kullanıcı isterse derinlik modunu değiştirebilir</li>
+                 <li>
+                   Örnek Excel dosyasını indirip referans olarak
+                   kullanabilirsiniz
+                 </li>
+>>>>>>> origin/master
               </ul>
             </div>
           </div>
