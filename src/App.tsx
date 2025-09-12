@@ -8,6 +8,7 @@ import {
   autoConfigureDepthForPreset,
   suggestNarrowedDepth,
   type Layer,
+  type Result,
 } from "./lib/calc";
 import { PRESETS, type Preset } from "./presets";
 import { getCombinedPresets } from "./excelPresets";
@@ -18,6 +19,7 @@ import {
   downloadSampleExcel,
   createFileInput,
   type ExcelData,
+  type ExcelMeasurement,
 } from "./lib/excelUtils";
 import "./App.css";
 
@@ -165,28 +167,6 @@ function App() {
     // Kalibrasyon yapılamazsa fallback:
     setDepthMode(autoMode === "VS30" ? "VS30" : "CUSTOM");
     if (autoMode === "CUSTOM") setCustomDepth(autoDepth);
-  };
-
-  // Otomatik kalibrasyon
-  const handleAutoCalibrate = () => {
-    const target = currentPreset?.expected?.Vsa_M3;
-    if (!target || !currentPreset) return;
-
-    const seed = currentPreset.autoDepthValue ?? 30; // preset’ten ipucu
-    const Hstar = calibrateDepthForTargetVsaM3(
-      layers,
-      defaultRho,
-      target,
-      5,
-      120,
-      0.5,
-      60,
-      seed
-    );
-    if (Hstar) {
-      setDepthMode("CUSTOM");
-      setCustomDepth(Number(Hstar.toFixed(2)));
-    }
   };
 
   // Derinlik aralığı daraltma önerisi

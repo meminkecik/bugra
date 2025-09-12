@@ -15,7 +15,6 @@ export async function loadExcelPresets(): Promise<Preset[]> {
     const arrayBuffer = await response.arrayBuffer();
     const workbook = XLSX.read(arrayBuffer, { type: "array" });
     const presets: Preset[] = [];
-    let presetIdCounter = 1;
 
     // Her sayfayı (her şehri) dolaş
     workbook.SheetNames.forEach((sheetName) => {

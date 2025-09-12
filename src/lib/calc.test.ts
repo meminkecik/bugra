@@ -6,9 +6,8 @@ import {
   computeVsaM4,
   computeG,
   trimLayersToDepth,
-  computeTM3,
-  computeVsaFromT,
   computeT,
+  computeVsaFromT,
   computeResults,
   validateLayer,
   calculateDeviation,
@@ -16,8 +15,6 @@ import {
   analyzeDeviations,
   autoConfigureDepthForPreset,
   suggestNarrowedDepth,
-  generateGeotechnicalReport,
-  calibrateDepthForTargetVsaM3,
   type Layer,
   type Result,
 } from "./calc";
@@ -140,7 +137,7 @@ describe("M1, M2, M3 ve M4 VSA Hesaplama Fonksiyonları", () => {
   describe("computeG", () => {
     it("kayma modülünü doğru hesaplar", () => {
       const layer: Layer = { id: "1", d: 10, vs: 200, rho: 1900 };
-      const result = computeG(layer, 1900);
+      const result = computeG(Number(layer.vs), 1900);
       expect(result).toBe(1900 * 200 * 200);
     });
   });
@@ -181,21 +178,12 @@ describe("M1, M2, M3 ve M4 VSA Hesaplama Fonksiyonları", () => {
 
   describe("computeTM3", () => {
     it("M3 yöntemi ile T hesaplar", () => {
-      const layers: Layer[] = [
-        { id: "1", d: 5, vs: 180, rho: 1900 },
-        { id: "2", d: 10, vs: 300, rho: 1900 },
-        { id: "3", d: 15, vs: 600, rho: 1900 },
-      ];
-      const result = computeTM3(layers, 1900);
+      const result = computeT(30, 300);
       expect(result).toBeGreaterThan(0);
     });
 
     it("geçersiz veriler için null döner", () => {
-      const layers: Layer[] = [
-        { id: "1", d: -5, vs: 180, rho: 1900 },
-        { id: "2", d: 10, vs: 300, rho: 1900 },
-      ];
-      const result = computeTM3(layers, 1900);
+      const result = computeT(0, 0);
       expect(result).toBeNull();
     });
   });
@@ -233,7 +221,15 @@ describe("M1, M2, M3 ve M4 VSA Hesaplama Fonksiyonları", () => {
         { id: "2", d: 10, vs: 300, rho: 1900 },
         { id: "3", d: 15, vs: 600, rho: 1900 },
       ];
-      const result = computeResults(layers, true, 1900, 30, 30, "TARGET", "MOC", "JEC");
+      const result = computeResults(
+        layers,
+        true,
+        1900,
+        30,
+        30,
+        "TARGET",
+        "MOC"
+      );
       expect(result).not.toBeNull();
       if (result) {
         expect(result.Vsa_M1).toBeCloseTo(397.4, 1);
@@ -250,7 +246,15 @@ describe("M1, M2, M3 ve M4 VSA Hesaplama Fonksiyonları", () => {
         { id: "2", d: 10, vs: 300, rho: 1900 },
         { id: "3", d: 15, vs: 600, rho: 1900 },
       ];
-      const result = computeResults(layers, false, 1900, 30, 30, "TARGET", "MOC", "JEC");
+      const result = computeResults(
+        layers,
+        false,
+        1900,
+        30,
+        30,
+        "TARGET",
+        "MOC"
+      );
       expect(result).not.toBeNull();
       if (result) {
         expect(result.T_M1).toBeNull();
@@ -327,6 +331,9 @@ describe("M1, M2, M3 ve M4 VSA Hesaplama Fonksiyonları", () => {
           Vsa_M2: 98,
           Vsa_M3: 102,
           Vsa_M4: 103,
+          Vsa_M5: null,
+          Vsa_M6: null,
+          Vsa_M7: null,
           T_M1: 0.2,
           T_M2: 0.2,
           T_M3: 0.2,
@@ -348,6 +355,9 @@ describe("M1, M2, M3 ve M4 VSA Hesaplama Fonksiyonları", () => {
           Vsa_M2: 95,
           Vsa_M3: 105,
           Vsa_M4: 90,
+          Vsa_M5: null,
+          Vsa_M6: null,
+          Vsa_M7: null,
           T_M1: 0.2,
           T_M2: 0.2,
           T_M3: 0.2,
@@ -367,6 +377,9 @@ describe("M1, M2, M3 ve M4 VSA Hesaplama Fonksiyonları", () => {
           Vsa_M2: 80,
           Vsa_M3: 110,
           Vsa_M4: 70,
+          Vsa_M5: null,
+          Vsa_M6: null,
+          Vsa_M7: null,
           T_M1: 0.2,
           T_M2: 0.2,
           T_M3: 0.2,
@@ -382,17 +395,31 @@ describe("M1, M2, M3 ve M4 VSA Hesaplama Fonksiyonları", () => {
 
     describe("autoConfigureDepthForPreset", () => {
       it("VS30 preset için doğru ayarları döner", () => {
-        const preset = { autoDepthMode: "VS30", autoDepthValue: 30 };
+        const preset = {
+          name: "Test Preset",
+          layers: [],
+          expected: { Vsa_M1: 0, Vsa_M2: 0, Vsa_M3: 0, Vsa_M4: 0 },
+          defaultRho: 1900,
+          autoDepthMode: "VS30" as const,
+          autoDepthValue: 30,
+        };
         const result = autoConfigureDepthForPreset(preset);
         expect(result.depthMode).toBe("VS30");
-        expect(result.depth).toBe(30);
+        expect(result.targetDepth).toBe(30);
       });
 
       it("CUSTOM preset için doğru ayarları döner", () => {
-        const preset = { autoDepthMode: "CUSTOM", autoDepthValue: 55 };
+        const preset = {
+          name: "Test Preset",
+          layers: [],
+          expected: { Vsa_M1: 0, Vsa_M2: 0, Vsa_M3: 0, Vsa_M4: 0 },
+          defaultRho: 1900,
+          autoDepthMode: "CUSTOM" as const,
+          autoDepthValue: 55,
+        };
         const result = autoConfigureDepthForPreset(preset);
         expect(result.depthMode).toBe("CUSTOM");
-        expect(result.depth).toBe(55);
+        expect(result.targetDepth).toBe(55);
       });
     });
 

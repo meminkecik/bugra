@@ -1,6 +1,7 @@
 // src/presets.ts
 import type { Layer } from "./lib/calc";
 
+export type { Layer };
 export type Preset = {
   name: string;
   layers: Layer[];
