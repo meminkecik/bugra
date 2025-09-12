@@ -10,7 +10,6 @@ import {
   type Layer,
 } from "./lib/calc";
 import { PRESETS, type Preset } from "./presets";
-import { getCombinedPresets } from "./excelPresets";
 
 import {
   readExcelFile,
@@ -34,7 +33,6 @@ function App() {
   const [depthMode, setDepthMode] = useState<DepthMode>("VS30");
   const [customDepth, setCustomDepth] = useState<number>(30);
   const [currentPreset, setCurrentPreset] = useState<Preset | null>(null);
-  const [availablePresets, setAvailablePresets] = useState<Preset[]>(PRESETS);
   const [deviationAnalysis, setDeviationAnalysis] = useState<any>(null);
   const [excelLoading, setExcelLoading] = useState(false);
   const [excelError, setExcelError] = useState<string | null>(null);
@@ -45,22 +43,6 @@ function App() {
     useState<number>(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Excel preset'lerini yükle
-  useEffect(() => {
-    const loadPresets = async () => {
-      try {
-        const combinedPresets = await getCombinedPresets();
-        setAvailablePresets(combinedPresets);
-      } catch (error) {
-        console.error("Excel preset'leri yüklenirken hata:", error);
-        // Hata durumunda sadece mevcut preset'leri kullan
-        setAvailablePresets(PRESETS);
-      }
-    };
-
-    loadPresets();
-  }, []);
-
   // Hedef derinliği belirle
   const targetDepth = useMemo(() => {
     if (depthMode === "VS30") return 30;
@@ -70,8 +52,6 @@ function App() {
 
   // Sonuçları hesapla - Batch hesaplama ile aynı mantık
   const result = useMemo(() => {
-    // M1, M2 hesaplamaları için de hedef derinliği kullan
-    const targetDepthM12 = targetDepth;
     const targetDepthM3 = targetDepth;
     const m3Mode: "TOTAL" | "TARGET" =
       depthMode === "SITE_HS" ? "TOTAL" : "TARGET"; // VS30/CUSTOM=TARGET, SITE_HS=TOTAL
@@ -82,7 +62,7 @@ function App() {
       defaultRho,
       targetDepthM12,
       targetDepthM3,
-      m3Mode
+      m3Mode // <<< eklendi
     );
   }, [layers, showT, defaultRho, targetDepth, depthMode]);
 
@@ -132,7 +112,6 @@ function App() {
 
   // Preset değiştiğinde otomatik derinlik ayarla
   const handlePresetChange = (presetName: string) => {
-    const preset = availablePresets.find((p) => p.name === presetName);
     if (!preset) return;
 
     setLayers(preset.layers);
@@ -272,6 +251,8 @@ function App() {
         throw new Error("Excel dosyasında geçerli ölçüm verisi bulunamadı");
       }
 
+      }
+
       // Excel verilerini sakla
       setExcelMeasurements(excelData.measurements);
       setCurrentMeasurementIndex(0);
@@ -370,43 +351,9 @@ function App() {
       }
     }
 
-    // VS30 hesaplamalarını yap
-    const vs30Results: Result[] = [];
-    for (const measurement of excelMeasurements) {
-      const tempResult = computeResults(
-        measurement.layers,
-        showT,
-        defaultRho,
-        30, // VS30 için 30m derinlik
-        30, // VS30 için 30m derinlik
-        "TARGET" // VS30 için TARGET modu
-      );
-
-      if (tempResult) {
-        vs30Results.push(tempResult);
-      } else {
-        // Hata durumunda boş sonuç ekle
-        vs30Results.push({
-          H_M12: 0,
-          H_M3: 0,
-          Vsa_M1: 0,
-          Vsa_M2: 0,
-          Vsa_M3: 0,
-          Vsa_M4: 0,
-          Vsa_M5: null,
-          Vsa_M6: null,
-          Vsa_M7: null,
-          T_M1: null,
-          T_M2: null,
-          T_M3: null,
-        });
-      }
-    }
-
     exportToExcel(
       excelMeasurements,
       allResults,
-      vs30Results,
       defaultRho,
       targetDepth,
       depthMode
@@ -683,7 +630,6 @@ function App() {
                 value=""
               >
                 <option value="">Seçiniz...</option>
-                {availablePresets.map((preset) => (
                   <option key={preset.name} value={preset.name}>
                     {preset.name}
                   </option>
