@@ -1,3 +1,5 @@
+
+// src/lib/calc.ts
 import type { Preset } from "../presets";
 
 export type Layer = {
@@ -150,7 +152,38 @@ export function computeVsaM7(
 
 /** --------------------------- M3 (MOC-2008, Rayleigh, Exact) --------------------------- **/
 
-const memo = new Map<string, number>();
+/** w arayüzleri (bedrock→surface): w[0]=0 (anakaya), w[N]=1 (yüzey)
+ *  Girdi layers: surface→bedrock (kırpılmış). İçeride ters çeviririz.
+ *  w, MOC-2008’de tanımlandığı gibi d/G kümülatifinin normalize edilmesiyle elde edilir. */
+function computeWInterfacesBedrockUp(
+  layersSurfaceDown: Layer[],
+  defaultRhoKgPerM3: number
+): { w: number[]; dOverG_sum: number; bottomUp: Layer[] } | null {
+  if (!layersSurfaceDown.length) return null;
+  const bottomUp = [...layersSurfaceDown].reverse();
+
+  // d/G parçaları
+  const parts: number[] = [];
+  let denom = 0;
+  for (const L of bottomUp) {
+    if (typeof L.d !== "number" || typeof L.vs !== "number") return null;
+    const rho = typeof L.rho === "number" ? L.rho : defaultRhoKgPerM3;
+    const G = computeG(L.vs, rho); // Pa
+    const t = L.d / G; // m/Pa
+    parts.push(t);
+    denom += t;
+  }
+  if (!(denom > 0)) return null;
+
+  // w[0]=0; kümülatif topla ve 0..1'e ölçekle
+  const w: number[] = [0];
+  let s = 0;
+  for (const t of parts) {
+    s += t;
+    w.push(s / denom);
+  }
+  return { w, dOverG_sum: denom, bottomUp };
+}
 
 /** M3 — MOC-2008 formülü (T_s = 4 * sqrt( (Σ d/G) * (Σ ρ d avg(w^2)) ) ) */
 export function computeTM3_MOC(
@@ -159,11 +192,10 @@ export function computeTM3_MOC(
 ): number | null {
   if (!layersSurfaceDown.length) return null;
 
-  const key = JSON.stringify(layersSurfaceDown.map(L => ({d: L.d, vs: L.vs, rho: L.rho})));
-  if (memo.has(key)) return memo.get(key)!;
-
+  // Surface→Bedrock giriyor, Bedrock→Surface sırasına çevir
   const bottomUp = [...layersSurfaceDown].reverse();
 
+  // Σ(d/G) ve w arayüzleri (w[0]=0 taban, w[N]=1 yüzey)
   const parts: number[] = [];
   let sum_d_over_G = 0;
   for (const L of bottomUp) {
@@ -186,24 +218,24 @@ export function computeTM3_MOC(
     w.push(acc / sum_d_over_G);
   }
 
+  // Σ(ρ d (w_top^2 + w_top*w_bot + w_bot^2)) — Tablo 1, M3
   let sum_rho_d_w2 = 0;
   for (let k = 0; k < bottomUp.length; k++) {
     const L = bottomUp[k];
     if (typeof L.d !== "number" || typeof L.vs !== "number") return null;
-    const rho = normalizeRho(
-      typeof L.rho === "number" ? L.rho : defaultRhoKgPerM3
-    );
+    const rho = normalizeRho(typeof L.rho === "number" ? L.rho : defaultRhoKgPerM3);
     const d = L.d;
-    const wb = w[k],
-      wt = w[k + 1];
+    const wb = w[k], wt = w[k + 1];
+    // DÜZELTME: Formül ortalama aldığı için 3'e bölünmelidir.
     sum_rho_d_w2 += (rho * d * (wt * wt + wt * wb + wb * wb)) / 3;
   }
   if (!(sum_rho_d_w2 > 0)) return null;
-
-  const T = 4 * Math.sqrt(sum_d_over_G * sum_rho_d_w2);
-  memo.set(key, T);
-  return T;
+  
+  // T = 4 * sqrt( Σ(d/G) * Σ(ρ d (...) ) )
+  // Not: Makaledeki formülde 1/3 terimi Σ(ρ d ...) içindedir.
+  return 4 * Math.sqrt(sum_d_over_G * sum_rho_d_w2);
 }
+
 
 /** M3 — Rayleigh (paper-adapted): T = 2π * sqrt( Σ m_i δ_i² / Σ f_i δ_i ) with linear assumed shape */
 export function computeTM3_RAYLEIGH(
@@ -211,15 +243,12 @@ export function computeTM3_RAYLEIGH(
   defaultRhoKgPerM3: number = 1900
 ): number | null {
   if (!layersSurfaceDown.length) return null;
-
-  const key = JSON.stringify(layersSurfaceDown.map(L => ({d: L.d, vs: L.vs, rho: L.rho})));
-  if (memo.has(key)) return memo.get(key)!;
-
   const n = layersSurfaceDown.length;
-  const bottomUp: Layer[] = [...layersSurfaceDown].reverse();
+  const bottomUp: Layer[] = [...layersSurfaceDown].reverse(); // base (i=0) to surface (i=n-1)
   const H = computeH(bottomUp);
   if (!(H > 0)) return null;
 
+  // G_i, rho_i, d_i'yi doğrula ve dizilere ata
   const G: number[] = [];
   const rho: number[] = [];
   const d: number[] = bottomUp.map((L) => L.d as number);
@@ -234,43 +263,57 @@ export function computeTM3_RAYLEIGH(
     if (G[i] <= 0 || rhoValue <= 0 || d[i] <= 0) return null;
   }
 
+  // DÜZELTME 1: Düğüm Kütlelerini (m_i) doğru hesapla
+  // Kütleler, katmanların arayüzlerindeki n adet düğüm noktasına atanır.
   const m: number[] = new Array(n).fill(0);
+  // i=0'dan n-2'ye kadar olan arayüz düğümleri (tabandan yukarı)
   for (let i = 0; i < n - 1; i++) {
-    m[i] = (rho[i] * d[i] + rho[i + 1] * d[i + 1]) / 2;
+    m[i] = (rho[i] * d[i] + rho[i+1] * d[i+1]) / 2;
   }
+  // Yüzeydeki son düğüm (i=n-1)
   m[n - 1] = (rho[n - 1] * d[n - 1]) / 2;
 
+  // DÜZELTME 2: Kütlelerin konumlarını düğüm noktaları olarak al
+  // posFromBase[i], i'inci düğümün tabandan yüksekliğidir (i=0 -> 1. katman üstü)
   const posFromBase: number[] = [];
   let accH = 0;
   for (let i = 0; i < n; i++) {
-    accH += d[i];
-    posFromBase[i] = accH;
+      accH += d[i];
+      posFromBase[i] = accH;
   }
 
+  // f_i için payda (Σ m_i * y_i)
   let sumDen = 0;
   for (let i = 0; i < n; i++) {
     sumDen += m[i] * posFromBase[i];
   }
   if (!(sumDen > 0)) return null;
 
+  // Yanal kuvvetler f_i (doğrusal şekil varsayımı)
   const f: number[] = [];
   for (let i = 0; i < n; i++) {
     f[i] = (m[i] * posFromBase[i]) / sumDen;
   }
 
+  // Q_i: i'inci katmandaki kesme kuvveti (yukarıdaki düğüm kuvvetlerinin toplamı)
+  // Diziyi ters çevirerek yüzeyden tabana doğru toplamak daha kolay.
   const Q: number[] = new Array(n).fill(0);
   let cumF = 0;
-  for (let i = n - 1; i >= 0; i--) {
-    cumF += f[i];
-    Q[i] = cumF;
+  for (let i = n - 1; i >= 0; i--) { // yüzeyden (n-1) tabana (0)
+      cumF += f[i];
+      Q[i] = cumF; // Q[i], i'inci katmanın (tabandan i'inci) içindeki kesme kuvvetidir
   }
 
+  // δ_i: i'inci düğümdeki yer değiştirme (tabandan itibaren kümülatif)
   const delta: number[] = new Array(n).fill(0);
+  // İlk katmanın (i=0) deformasyonu -> ilk düğümün (i=0) yer değiştirmesi
   delta[0] = (Q[0] * d[0]) / G[0];
   for (let i = 1; i < n; i++) {
+    // Sonraki düğümlerin yer değiştirmesi = alttaki düğümün yer değiştirmesi + mevcut katmanın deformasyonu
     delta[i] = delta[i - 1] + (Q[i] * d[i]) / G[i];
   }
 
+  // Rayleigh periyot formülü için toplamlar
   let sumMDelta2 = 0;
   let sumFDelta = 0;
   for (let i = 0; i < n; i++) {
@@ -279,10 +322,9 @@ export function computeTM3_RAYLEIGH(
   }
   if (!(sumFDelta > 0)) return null;
 
-  const T = 2 * Math.PI * Math.sqrt(sumMDelta2 / sumFDelta);
-  memo.set(key, T);
-  return T;
+  return 2 * Math.PI * Math.sqrt(sumMDelta2 / sumFDelta);
 }
+
 
 /** M3 — Exact Transfer Matrix Method for fundamental period */
 export function computeTM3_EXACT(
@@ -290,49 +332,36 @@ export function computeTM3_EXACT(
   defaultRhoKgPerM3: number = 1900
 ): number | null {
   if (!layersSurfaceDown.length) return null;
-
-  const key = JSON.stringify(layersSurfaceDown.map(L => ({d: L.d, vs: L.vs, rho: L.rho})));
-  if (memo.has(key)) return memo.get(key)!;
-
-  const bottomUp = [...layersSurfaceDown].reverse().map((L) => ({
+  const bottomUp = [...layersSurfaceDown].reverse().map(L => ({
     d: L.d as number,
     vs: L.vs as number,
-    rho: normalizeRho(typeof L.rho === "number" ? L.rho : defaultRhoKgPerM3),
+    rho: normalizeRho(typeof L.rho === "number" ? L.rho : defaultRhoKgPerM3)
   }));
   const H = bottomUp.reduce((s, L) => s + L.d, 0);
   if (!(H > 0)) return null;
 
   function transferMatrix(omega: number, d: number, vs: number, rho: number) {
-    const alpha = (omega * d) / vs;
+    const alpha = omega * d / vs;
     const cos_a = Math.cos(alpha);
     const sin_a = Math.sin(alpha);
-    const eps = 1e-10;
+    const eps = 1e-10; // zero omega avoidance
     const term2 = sin_a / (rho * vs * omega + eps);
     const term3 = -rho * vs * omega * sin_a;
     return [
       [cos_a, term2],
-      [term3, cos_a],
+      [term3, cos_a]
     ];
   }
 
   function matMul(a: number[][], b: number[][]): number[][] {
     return [
-      [
-        a[0][0] * b[0][0] + a[0][1] * b[1][0],
-        a[0][0] * b[0][1] + a[0][1] * b[1][1],
-      ],
-      [
-        a[1][0] * b[0][0] + a[1][1] * b[1][0],
-        a[1][0] * b[0][1] + a[1][1] * b[1][1],
-      ],
+      [a[0][0] * b[0][0] + a[0][1] * b[1][0], a[0][0] * b[0][1] + a[0][1] * b[1][1]],
+      [a[1][0] * b[0][0] + a[1][1] * b[1][0], a[1][0] * b[0][1] + a[1][1] * b[1][1]]
     ];
   }
 
   function computeM22(omega: number): number {
-    let M: number[][] = [
-      [1, 0],
-      [0, 1],
-    ];
+    let M: number[][] = [[1, 0], [0, 1]];
     for (const L of bottomUp) {
       const mat = transferMatrix(omega, L.d, L.vs, L.rho);
       M = matMul(mat, M);
@@ -340,41 +369,48 @@ export function computeTM3_EXACT(
     return M[1][1];
   }
 
-  // Bisection ile sadeleştirilmiş kök bulma
-  const minVs = Math.min(...bottomUp.map(L => L.vs));
-  const maxOmega = Math.max(1000, 10 * H / minVs);
-  const dOmega = 0.1;
+  // Find lowest omega >0 where M22(omega) = 0 using sign change and bisection
+  const maxOmega = 1000;
+  const dOmega = 0.01;
   const tol = 1e-6;
-  let a = dOmega;
-  let b = maxOmega;
-  let fa = computeM22(a);
-
-  while (b - a > tol) {
-    const c = (a + b) / 2;
-    const fc = computeM22(c);
-    if (fc * fa <= 0) {
-      b = c;
-    } else {
-      a = c;
-      fa = fc;
+  let omega = dOmega;
+  let f_prev = computeM22(0); // should be 1
+  while (omega < maxOmega) {
+    const f = computeM22(omega);
+    if (f * f_prev <= 0) {
+      // Sign change, refine with bisection
+      let a = omega - dOmega;
+      let b = omega;
+      while (b - a > tol) {
+        const mid = (a + b) / 2;
+        const fm = computeM22(mid);
+        if (fm * f_prev <= 0) {
+          b = mid;
+        } else {
+          a = mid;
+        }
+      }
+      const omega0 = (a + b) / 2;
+      return 2 * Math.PI / omega0;
     }
+    f_prev = f;
+    omega += dOmega;
   }
-  const omega0 = (a + b) / 2;
-  const T = (2 * Math.PI) / omega0;
-  memo.set(key, T);
-  return T;
+  return null;
 }
 
-/** M7 (Proposed): T = 5.515 * sum sqrt( S_i * d_i / G_i ), Vsa = 4H / T */
+/** New: Proposed method from the paper (M7): T = 5.515 * sum sqrt( S_i * d_i / G_i ), Vsa = 4H / T */
+/** M7 (Bozdogan & Keskin, düzeltilmiş): 
+ *  T = k * sqrt( Σ (S_i * d_i / G_i) ),  Vsa = 4H / T
+ *  Burada S_i = (üstteki kümülatif kütle) + (katmanın yarı kütlesi),
+ *  G_i = ρ_i * Vs_i^2, k ≈ 5.515 (çok katmanlı kalibrasyon).
+ */
 export function computeTM7_PROPOSED(
   layersSurfaceDown: Layer[],
   defaultRhoKgPerM3: number = 1900,
   useSingleLayerConstant: boolean = false
 ): number | null {
   if (!layersSurfaceDown.length) return null;
-
-  const key = JSON.stringify(layersSurfaceDown.map(L => ({d: L.d, vs: L.vs, rho: L.rho})));
-  if (memo.has(key)) return memo.get(key)!;
 
   const n = layersSurfaceDown.length;
   const bottomUp = [...layersSurfaceDown].reverse();
@@ -388,9 +424,7 @@ export function computeTM7_PROPOSED(
     const Li = bottomUp[i];
     if (typeof Li.d !== "number" || Li.d <= 0) return null;
     if (typeof Li.vs !== "number" || Li.vs <= 0) return null;
-    const rhoVal = normalizeRho(
-      typeof Li.rho === "number" ? Li.rho : defaultRhoKgPerM3
-    );
+    const rhoVal = normalizeRho(typeof Li.rho === "number" ? Li.rho : defaultRhoKgPerM3);
     if (!(rhoVal > 0)) return null;
     d[i] = Li.d;
     rho[i] = rhoVal;
@@ -398,38 +432,51 @@ export function computeTM7_PROPOSED(
     if (!(G[i] > 0)) return null;
   }
 
+  // S_i: i katmanının ortasındaki kesme kuvvetini temsil eden kütle
+  // (üstteki katmanların toplam kütlesi + mevcut katmanın kütlesinin yarısı)
   const S: number[] = [];
   let cumMassAbove = 0;
-  for (let i = n - 1; i >= 0; i--) {
+  for (let i = n - 1; i >= 0; i--) { // Yüzeyden aşağıya
     S[i] = cumMassAbove + (rho[i] * d[i]) / 2;
     cumMassAbove += rho[i] * d[i];
   }
-
+  
+  // sum_term = y_top, yani toplam statik yer değiştirme.
+  // y_top = Σ (V_i * h_i / A*G_i) -> V_i/A ~ S_i.
   let sum_term = 0;
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < n; i++) { // Tabandan yukarıya
     sum_term += (S[i] * d[i]) / G[i];
   }
   if (!(sum_term > 0)) return null;
 
-  const k = n === 1 && useSingleLayerConstant ? 4 * Math.sqrt(2) : 5.515;
-  const T = k * Math.sqrt(sum_term);
-  memo.set(key, T);
-  return T;
+  const k = (n === 1 && useSingleLayerConstant) ? 4 * Math.sqrt(2) : 5.515;
+  return k * Math.sqrt(sum_term);
 }
 
 /** --------------------------- ASWV–FSP ilişkisi --------------------------- **/
 
+/** ASWV–FSP: Vsa = 4H / T  */
 export function computeVsaFromT(H: number, T: number | null): number | null {
   if (!isFinite(H) || H <= 0 || !T || !isFinite(T) || T <= 0) return null;
   return (4 * H) / T;
 }
 
+/** T = 4H / Vsa  */
 export function computeT(H: number, Vsa: number | null): number | null {
   if (!isFinite(H) || H <= 0 || !Vsa || !isFinite(Vsa) || Vsa <= 0) return null;
   return (4 * H) / Vsa;
 }
 
 /** --------------------------- Sonuçlar --------------------------- **/
+/**
+ * m3DepthMode:
+ *  - "TOTAL": M3 için Hs = toplam profil kalınlığı
+ *  - "TARGET": M3 için Hs = targetDepthM3 (örn. Vs30 için 30 m)
+ * m3Formula:
+ *  - "MOC": T_s = 4 * sqrt( (Σ d/G) * (Σ ρ d avg(w^2)) )
+ *  - "RAYLEIGH": T = 2π * sqrt( Σ m_i δ_i² / Σ f_i δ_i )
+ *  - "EXACT": Transfer Matrix Method ile tam doğal periyot hesabı
+ */
 export function computeResults(
   layersSurfaceDown: Layer[],
   showT: boolean,
@@ -443,7 +490,7 @@ export function computeResults(
     ? trimLayersToDepth(layersSurfaceDown, targetDepthM12)
     : layersSurfaceDown;
   if (!Ls12.length) return null;
-  let Ls3: Layer[], H3: number;
+    let Ls3: Layer[], H3: number;
   if (m3DepthMode === "TOTAL") {
     Ls3 = layersSurfaceDown;
     H3 = computeProfileDepth(layersSurfaceDown);
@@ -472,6 +519,8 @@ export function computeResults(
   )
     return null;
 
+
+
   const T_M3_tmp =
     m3Formula === "MOC"
       ? computeTM3_MOC(Ls3, defaultRho)
@@ -489,9 +538,9 @@ export function computeResults(
     Vsa_M2,
     Vsa_M3,
     Vsa_M4,
-    Vsa_M5: Vsa_M5 ?? NaN,
-    Vsa_M6: Vsa_M6 ?? NaN,
-    Vsa_M7: Vsa_M7 ?? NaN,
+    Vsa_M5,
+    Vsa_M6,
+    Vsa_M7,
     T_M1: null,
     T_M2: null,
     T_M3: null,
@@ -517,9 +566,6 @@ export function validateLayer(layer: Layer): {
     errors.push("Kesme dalga hızı pozitif bir sayı olmalıdır");
   if (typeof layer.rho === "number" && (layer.rho <= 0 || layer.rho > 5000))
     errors.push("Yoğunluk 0-5000 kg/m³ arasında olmalıdır");
-  if (typeof layer.rho === "number" && layer.rho > 500 && layer.rho < 2000) {
-    errors.push("Yoğunluk t/m³ olarak girilmiş olabilir? Otomatik kg/m³'ye çevrildi.");
-  }
   if (typeof layer.d === "number" && layer.d > 10000)
     errors.push("Kalınlık çok büyük (10,000 m'den fazla)");
   if (typeof layer.vs === "number" && layer.vs > 6000)
@@ -531,7 +577,7 @@ function computeProfileDepth(layers: Layer[]): number {
   return layers.reduce((s, L) => s + (typeof L.d === "number" ? L.d : 0), 0);
 }
 
-/** --------- M3 derinlik kalibrasyonu / raporlama yardımcıları --------- **/
+/** --------- M3 derinlik kalibrasyonu / raporlama yardımcıları (değişmedi) --------- **/
 
 function computeVsaM3AtDepth(
   layers: Layer[],
@@ -551,6 +597,7 @@ function computeVsaM3AtDepth(
   return computeVsaFromT(Hused, T);
 }
 
+// golden-section, calibrateDepthForTargetVsaM3, sapma analizleri vs. (aynen)
 function goldenSectionMin(
   f: (x: number) => number,
   a: number,
@@ -606,16 +653,11 @@ export function calibrateDepthForTargetVsaM3(
     return v == null ? Number.POSITIVE_INFINITY : Math.abs(v - vsaTarget);
   };
 
-  const points = [Hmin, (Hmin + Hmax) / 2, Hmax];
-  let bestH = Hmin, bestE = err(Hmin);
-  for (const p of points) {
-    const e = err(p);
-    if (e < bestE) { bestE = e; bestH = p; }
-  }
-
   const N = 60;
+  let bestH = Hmin,
+    bestE = err(Hmin);
   let a = Hmin,
-      b = Hmax;
+    b = Hmax;
   if (seedDepth && seedDepth > Hmin && seedDepth < Hmax) {
     a = Math.max(Hmin, seedDepth * 0.5);
     b = Math.min(Hmax, seedDepth * 1.5);
@@ -679,7 +721,6 @@ export function analyzeDeviations(
   };
   highDeviations: string[];
   needsNarrowing: boolean;
-  rmse?: number;
 } {
   const deviations = {
     M1: calculateDeviation(result.Vsa_M1, expected.Vsa_M1),
@@ -741,7 +782,6 @@ export function analyzeDeviations(
     deviations,
     highDeviations,
     needsNarrowing: highDeviations.length > 0,
-    rmse: Math.sqrt(Object.values(deviations).reduce((s, v) => s + v * v, 0) / Object.keys(deviations).length),
   };
 }
 
