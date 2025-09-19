@@ -1,4 +1,3 @@
-
 // src/lib/calc.ts
 import type { Preset } from "../presets";
 
@@ -152,39 +151,6 @@ export function computeVsaM7(
 
 /** --------------------------- M3 (MOC-2008, Rayleigh, Exact) --------------------------- **/
 
-/** w arayüzleri (bedrock→surface): w[0]=0 (anakaya), w[N]=1 (yüzey)
- *  Girdi layers: surface→bedrock (kırpılmış). İçeride ters çeviririz.
- *  w, MOC-2008’de tanımlandığı gibi d/G kümülatifinin normalize edilmesiyle elde edilir. */
-function computeWInterfacesBedrockUp(
-  layersSurfaceDown: Layer[],
-  defaultRhoKgPerM3: number
-): { w: number[]; dOverG_sum: number; bottomUp: Layer[] } | null {
-  if (!layersSurfaceDown.length) return null;
-  const bottomUp = [...layersSurfaceDown].reverse();
-
-  // d/G parçaları
-  const parts: number[] = [];
-  let denom = 0;
-  for (const L of bottomUp) {
-    if (typeof L.d !== "number" || typeof L.vs !== "number") return null;
-    const rho = typeof L.rho === "number" ? L.rho : defaultRhoKgPerM3;
-    const G = computeG(L.vs, rho); // Pa
-    const t = L.d / G; // m/Pa
-    parts.push(t);
-    denom += t;
-  }
-  if (!(denom > 0)) return null;
-
-  // w[0]=0; kümülatif topla ve 0..1'e ölçekle
-  const w: number[] = [0];
-  let s = 0;
-  for (const t of parts) {
-    s += t;
-    w.push(s / denom);
-  }
-  return { w, dOverG_sum: denom, bottomUp };
-}
-
 /** M3 — MOC-2008 formülü (T_s = 4 * sqrt( (Σ d/G) * (Σ ρ d avg(w^2)) ) ) */
 export function computeTM3_MOC(
   layersSurfaceDown: Layer[],
@@ -223,19 +189,21 @@ export function computeTM3_MOC(
   for (let k = 0; k < bottomUp.length; k++) {
     const L = bottomUp[k];
     if (typeof L.d !== "number" || typeof L.vs !== "number") return null;
-    const rho = normalizeRho(typeof L.rho === "number" ? L.rho : defaultRhoKgPerM3);
+    const rho = normalizeRho(
+      typeof L.rho === "number" ? L.rho : defaultRhoKgPerM3
+    );
     const d = L.d;
-    const wb = w[k], wt = w[k + 1];
+    const wb = w[k],
+      wt = w[k + 1];
     // DÜZELTME: Formül ortalama aldığı için 3'e bölünmelidir.
     sum_rho_d_w2 += (rho * d * (wt * wt + wt * wb + wb * wb)) / 3;
   }
   if (!(sum_rho_d_w2 > 0)) return null;
-  
+
   // T = 4 * sqrt( Σ(d/G) * Σ(ρ d (...) ) )
   // Not: Makaledeki formülde 1/3 terimi Σ(ρ d ...) içindedir.
   return 4 * Math.sqrt(sum_d_over_G * sum_rho_d_w2);
 }
-
 
 /** M3 — Rayleigh (paper-adapted): T = 2π * sqrt( Σ m_i δ_i² / Σ f_i δ_i ) with linear assumed shape */
 export function computeTM3_RAYLEIGH(
@@ -268,7 +236,7 @@ export function computeTM3_RAYLEIGH(
   const m: number[] = new Array(n).fill(0);
   // i=0'dan n-2'ye kadar olan arayüz düğümleri (tabandan yukarı)
   for (let i = 0; i < n - 1; i++) {
-    m[i] = (rho[i] * d[i] + rho[i+1] * d[i+1]) / 2;
+    m[i] = (rho[i] * d[i] + rho[i + 1] * d[i + 1]) / 2;
   }
   // Yüzeydeki son düğüm (i=n-1)
   m[n - 1] = (rho[n - 1] * d[n - 1]) / 2;
@@ -278,8 +246,8 @@ export function computeTM3_RAYLEIGH(
   const posFromBase: number[] = [];
   let accH = 0;
   for (let i = 0; i < n; i++) {
-      accH += d[i];
-      posFromBase[i] = accH;
+    accH += d[i];
+    posFromBase[i] = accH;
   }
 
   // f_i için payda (Σ m_i * y_i)
@@ -299,9 +267,10 @@ export function computeTM3_RAYLEIGH(
   // Diziyi ters çevirerek yüzeyden tabana doğru toplamak daha kolay.
   const Q: number[] = new Array(n).fill(0);
   let cumF = 0;
-  for (let i = n - 1; i >= 0; i--) { // yüzeyden (n-1) tabana (0)
-      cumF += f[i];
-      Q[i] = cumF; // Q[i], i'inci katmanın (tabandan i'inci) içindeki kesme kuvvetidir
+  for (let i = n - 1; i >= 0; i--) {
+    // yüzeyden (n-1) tabana (0)
+    cumF += f[i];
+    Q[i] = cumF; // Q[i], i'inci katmanın (tabandan i'inci) içindeki kesme kuvvetidir
   }
 
   // δ_i: i'inci düğümdeki yer değiştirme (tabandan itibaren kümülatif)
@@ -325,23 +294,22 @@ export function computeTM3_RAYLEIGH(
   return 2 * Math.PI * Math.sqrt(sumMDelta2 / sumFDelta);
 }
 
-
 /** M3 — Exact Transfer Matrix Method for fundamental period */
 export function computeTM3_EXACT(
   layersSurfaceDown: Layer[],
   defaultRhoKgPerM3: number = 1900
 ): number | null {
   if (!layersSurfaceDown.length) return null;
-  const bottomUp = [...layersSurfaceDown].reverse().map(L => ({
+  const bottomUp = [...layersSurfaceDown].reverse().map((L) => ({
     d: L.d as number,
     vs: L.vs as number,
-    rho: normalizeRho(typeof L.rho === "number" ? L.rho : defaultRhoKgPerM3)
+    rho: normalizeRho(typeof L.rho === "number" ? L.rho : defaultRhoKgPerM3),
   }));
   const H = bottomUp.reduce((s, L) => s + L.d, 0);
   if (!(H > 0)) return null;
 
   function transferMatrix(omega: number, d: number, vs: number, rho: number) {
-    const alpha = omega * d / vs;
+    const alpha = (omega * d) / vs;
     const cos_a = Math.cos(alpha);
     const sin_a = Math.sin(alpha);
     const eps = 1e-10; // zero omega avoidance
@@ -349,19 +317,28 @@ export function computeTM3_EXACT(
     const term3 = -rho * vs * omega * sin_a;
     return [
       [cos_a, term2],
-      [term3, cos_a]
+      [term3, cos_a],
     ];
   }
 
   function matMul(a: number[][], b: number[][]): number[][] {
     return [
-      [a[0][0] * b[0][0] + a[0][1] * b[1][0], a[0][0] * b[0][1] + a[0][1] * b[1][1]],
-      [a[1][0] * b[0][0] + a[1][1] * b[1][0], a[1][0] * b[0][1] + a[1][1] * b[1][1]]
+      [
+        a[0][0] * b[0][0] + a[0][1] * b[1][0],
+        a[0][0] * b[0][1] + a[0][1] * b[1][1],
+      ],
+      [
+        a[1][0] * b[0][0] + a[1][1] * b[1][0],
+        a[1][0] * b[0][1] + a[1][1] * b[1][1],
+      ],
     ];
   }
 
   function computeM22(omega: number): number {
-    let M: number[][] = [[1, 0], [0, 1]];
+    let M: number[][] = [
+      [1, 0],
+      [0, 1],
+    ];
     for (const L of bottomUp) {
       const mat = transferMatrix(omega, L.d, L.vs, L.rho);
       M = matMul(mat, M);
@@ -391,7 +368,7 @@ export function computeTM3_EXACT(
         }
       }
       const omega0 = (a + b) / 2;
-      return 2 * Math.PI / omega0;
+      return (2 * Math.PI) / omega0;
     }
     f_prev = f;
     omega += dOmega;
@@ -400,7 +377,7 @@ export function computeTM3_EXACT(
 }
 
 /** New: Proposed method from the paper (M7): T = 5.515 * sum sqrt( S_i * d_i / G_i ), Vsa = 4H / T */
-/** M7 (Bozdogan & Keskin, düzeltilmiş): 
+/** M7 (Bozdogan & Keskin, düzeltilmiş):
  *  T = k * sqrt( Σ (S_i * d_i / G_i) ),  Vsa = 4H / T
  *  Burada S_i = (üstteki kümülatif kütle) + (katmanın yarı kütlesi),
  *  G_i = ρ_i * Vs_i^2, k ≈ 5.515 (çok katmanlı kalibrasyon).
@@ -424,7 +401,9 @@ export function computeTM7_PROPOSED(
     const Li = bottomUp[i];
     if (typeof Li.d !== "number" || Li.d <= 0) return null;
     if (typeof Li.vs !== "number" || Li.vs <= 0) return null;
-    const rhoVal = normalizeRho(typeof Li.rho === "number" ? Li.rho : defaultRhoKgPerM3);
+    const rhoVal = normalizeRho(
+      typeof Li.rho === "number" ? Li.rho : defaultRhoKgPerM3
+    );
     if (!(rhoVal > 0)) return null;
     d[i] = Li.d;
     rho[i] = rhoVal;
@@ -436,20 +415,22 @@ export function computeTM7_PROPOSED(
   // (üstteki katmanların toplam kütlesi + mevcut katmanın kütlesinin yarısı)
   const S: number[] = [];
   let cumMassAbove = 0;
-  for (let i = n - 1; i >= 0; i--) { // Yüzeyden aşağıya
+  for (let i = n - 1; i >= 0; i--) {
+    // Yüzeyden aşağıya
     S[i] = cumMassAbove + (rho[i] * d[i]) / 2;
     cumMassAbove += rho[i] * d[i];
   }
-  
+
   // sum_term = y_top, yani toplam statik yer değiştirme.
   // y_top = Σ (V_i * h_i / A*G_i) -> V_i/A ~ S_i.
   let sum_term = 0;
-  for (let i = 0; i < n; i++) { // Tabandan yukarıya
+  for (let i = 0; i < n; i++) {
+    // Tabandan yukarıya
     sum_term += (S[i] * d[i]) / G[i];
   }
   if (!(sum_term > 0)) return null;
 
-  const k = (n === 1 && useSingleLayerConstant) ? 4 * Math.sqrt(2) : 5.515;
+  const k = n === 1 && useSingleLayerConstant ? 4 * Math.sqrt(2) : 5.515;
   return k * Math.sqrt(sum_term);
 }
 
@@ -490,7 +471,7 @@ export function computeResults(
     ? trimLayersToDepth(layersSurfaceDown, targetDepthM12)
     : layersSurfaceDown;
   if (!Ls12.length) return null;
-    let Ls3: Layer[], H3: number;
+  let Ls3: Layer[], H3: number;
   if (m3DepthMode === "TOTAL") {
     Ls3 = layersSurfaceDown;
     H3 = computeProfileDepth(layersSurfaceDown);
@@ -518,8 +499,6 @@ export function computeResults(
     Vsa_M7 == null
   )
     return null;
-
-
 
   const T_M3_tmp =
     m3Formula === "MOC"

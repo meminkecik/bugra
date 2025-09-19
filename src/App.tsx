@@ -78,15 +78,36 @@ function App() {
     const m3Mode: "TOTAL" | "TARGET" =
       depthMode === "SITE_HS" ? "TOTAL" : "TARGET"; // VS30/CUSTOM=TARGET, SITE_HS=TOTAL
 
+    // Excel ölçümündeki yöntemi kullan, yoksa varsayılan "EXACT"
+    let m3Formula: "MOC" | "RAYLEIGH" | "EXACT" = "EXACT";
+    if (excelMeasurements.length > 0 && currentMeasurementIndex !== null) {
+      const currentMeasurement = excelMeasurements[currentMeasurementIndex];
+      if (currentMeasurement?.method) {
+        const method = currentMeasurement.method.toUpperCase();
+        if (method === "MOC" || method === "RAYLEIGH" || method === "EXACT") {
+          m3Formula = method as "MOC" | "RAYLEIGH" | "EXACT";
+        }
+      }
+    }
+
     return computeResults(
       layers,
       showT,
       defaultRho,
       targetDepthM12,
       targetDepthM3,
-      m3Mode
+      m3Mode,
+      m3Formula
     );
-  }, [layers, showT, defaultRho, targetDepth, depthMode]);
+  }, [
+    layers,
+    showT,
+    defaultRho,
+    targetDepth,
+    depthMode,
+    excelMeasurements,
+    currentMeasurementIndex,
+  ]);
 
   // Sapma analizi
   useEffect(() => {
@@ -313,20 +334,27 @@ function App() {
 
   // Excel olarak sonuçları indir (çoklu ölçüm)
   const downloadExcelResults = async () => {
-    if (!result || excelMeasurements.length === 0) return;
+    if (excelMeasurements.length === 0) return;
 
     // Tüm ölçümler için sonuçları hesapla
     const allResults: Result[] = [];
 
     for (const measurement of excelMeasurements) {
       const tempLayers = measurement.layers;
+
+      // Her ölçümün kendi yöntemini kullan
+      const m3Formula: "MOC" | "RAYLEIGH" | "EXACT" =
+        (measurement.method?.toUpperCase() as "MOC" | "RAYLEIGH" | "EXACT") ||
+        "EXACT";
+
       const tempResult = computeResults(
         tempLayers,
         showT,
         defaultRho,
         Number.POSITIVE_INFINITY,
         targetDepth,
-        depthMode === "SITE_HS" ? "TOTAL" : "TARGET"
+        depthMode === "SITE_HS" ? "TOTAL" : "TARGET",
+        m3Formula
       );
 
       if (tempResult) {
@@ -353,13 +381,19 @@ function App() {
     // VS30 hesaplamalarını yap
     const vs30Results: Result[] = [];
     for (const measurement of excelMeasurements) {
+      // Her ölçümün kendi yöntemini kullan
+      const m3Formula: "MOC" | "RAYLEIGH" | "EXACT" =
+        (measurement.method?.toUpperCase() as "MOC" | "RAYLEIGH" | "EXACT") ||
+        "EXACT";
+
       const tempResult = computeResults(
         measurement.layers,
         showT,
         defaultRho,
         30, // VS30 için 30m derinlik
         30, // VS30 için 30m derinlik
-        "TARGET" // VS30 için TARGET modu
+        "TARGET", // VS30 için TARGET modu
+        m3Formula
       );
 
       if (tempResult) {
@@ -513,8 +547,8 @@ function App() {
             <div className="mt-4 rounded-md bg-blue-50 p-4">
               <div className="flex items-center justify-between">
                 <div className="text-sm text-blue-800">
-                  <strong>Çoklu Ölçüm:</strong> {excelMeasurements.length} ölçüm
-                  yüklendi
+                  <strong>Excel'den Yüklenen Ölçümler:</strong>{" "}
+                  {excelMeasurements.length} adet
                 </div>
                 <div className="flex items-center gap-2">
                   <button
@@ -538,10 +572,17 @@ function App() {
                   </button>
                 </div>
               </div>
-              <div className="mt-2 text-xs text-blue-600">
-                <strong>Mevcut Ölçüm:</strong>{" "}
-                {excelMeasurements[currentMeasurementIndex]?.name ||
-                  `Ölçüm ${currentMeasurementIndex + 1}`}
+              <div className="mt-2 space-y-1 text-xs text-blue-600">
+                <div>
+                  <strong>Mevcut Ölçüm:</strong>{" "}
+                  {excelMeasurements[currentMeasurementIndex]?.name ||
+                    `Ölçüm ${currentMeasurementIndex + 1}`}
+                </div>
+                <div>
+                  <strong>Hesaplama Yöntemi:</strong>{" "}
+                  {excelMeasurements[currentMeasurementIndex]?.method || "MOC"}
+                  {" (M3 formülü için kullanılacak)"}
+                </div>
               </div>
             </div>
           )}
@@ -656,7 +697,7 @@ function App() {
           {/* Örnek Profil Seçimi */}
           <div className="mb-4">
             <label className="text-sm">
-              Örnek profili seç:
+              Örnek profili seç ({availablePresets.length} adet ölçüm):
               <select
                 className="ml-2 rounded border border-gray-300 px-2 py-1"
                 onChange={(e) => handlePresetChange(e.target.value)}
@@ -780,7 +821,7 @@ function App() {
 
             <button
               onClick={downloadExcelResults}
-              disabled={!result}
+              disabled={excelMeasurements.length === 0 || excelLoading}
               className="rounded bg-orange-600 px-4 py-2 text-white hover:bg-orange-700 disabled:opacity-50"
             >
               Excel İndir
@@ -859,6 +900,14 @@ function App() {
                     T: {result.T_M3.toFixed(3)} s
                   </div>
                 )}
+                <div className="mt-1 text-xs text-purple-600">
+                  Yöntem:{" "}
+                  {excelMeasurements.length > 0 &&
+                  currentMeasurementIndex !== null
+                    ? excelMeasurements[currentMeasurementIndex]?.method ||
+                      "EXACT"
+                    : "EXACT"}
+                </div>
               </div>
 
               <div className="rounded-lg bg-orange-50 p-4">

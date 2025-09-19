@@ -3,12 +3,13 @@ import * as XLSX from "xlsx";
 import type { Layer, Preset } from "./presets";
 
 /**
- * Birleştirilmiş.xlsx dosyasından preset'leri oluşturur
+ * Proje içindeki son_alt.xlsx dosyasından preset'leri oluşturur
+ * Dropdown'da (Örnek profili seç) gösterilir.
  */
 export async function loadExcelPresets(): Promise<Preset[]> {
   try {
-    // Excel dosyasını fetch ile oku
-    const response = await fetch("/Birleştirilmiş.xlsx");
+    // Excel dosyasını fetch ile oku (public/ altında olmalı)
+    const response = await fetch("/son_alt.xlsx");
     if (!response.ok) {
       throw new Error(`Excel dosyası yüklenemedi: ${response.status}`);
     }
@@ -21,111 +22,199 @@ export async function loadExcelPresets(): Promise<Preset[]> {
       const worksheet = workbook.Sheets[sheetName];
       const jsonData = XLSX.utils.sheet_to_json(worksheet, {
         header: 1,
-      }) as any[][];
+      }) as unknown[][];
 
-      if (jsonData.length < 5) return; // Yeterli veri yoksa sayfayı atla
+      if (jsonData.length < 2) return;
 
-      // Tüm 'İSTASYON KODU' satırlarını bul ve işle
-      for (let rowIndex = 0; rowIndex < jsonData.length; rowIndex++) {
-        const row = jsonData[rowIndex];
+      // Header sütunlarını tespit et
+      let headerRowIndex = -1;
+      let nameColIndex = -1;
+      let methodColIndex = -1;
+      let cityColIndex = -1;
+      let districtColIndex = -1;
+      let depthStartColIndex = -1;
+      let depthEndColIndex = -1;
+      let vsColIndex = -1;
+
+      for (let r = 0; r < Math.min(jsonData.length, 15); r++) {
+        const row = jsonData[r];
+        if (!row) continue;
+        for (let c = 0; c < row.length; c++) {
+          const cell = row[c];
+          if (typeof cell !== "string") continue;
+          const s = cell.toLowerCase().trim();
+          if (
+            (s.includes("isim") ||
+              s.includes("ad") ||
+              s.includes("istasyon") ||
+              s.includes("lokasyon") ||
+              s.includes("name") ||
+              s.includes("station") ||
+              s.includes("location")) &&
+            nameColIndex === -1
+          ) {
+            headerRowIndex = r;
+            nameColIndex = c;
+          }
+          if (
+            (s.includes("yöntem") ||
+              s.includes("method") ||
+              s.includes("tip") ||
+              s.includes("type")) &&
+            methodColIndex === -1
+          ) {
+            methodColIndex = c;
+          }
+          if (
+            (s.includes("il") || s.includes("şehir") || s.includes("city")) &&
+            cityColIndex === -1
+          ) {
+            cityColIndex = c;
+          }
+          if (
+            (s.includes("ilçe") ||
+              s.includes("county") ||
+              s.includes("district")) &&
+            districtColIndex === -1
+          ) {
+            districtColIndex = c;
+          }
+          if (
+            s.includes("derinlik") &&
+            (s.includes("baş") ||
+              s.includes("üst") ||
+              s.includes("from") ||
+              s.includes("start") ||
+              s.includes("top")) &&
+            depthStartColIndex === -1
+          ) {
+            depthStartColIndex = c;
+          }
+          if (
+            s.includes("derinlik") &&
+            (s.includes("son") ||
+              s.includes("alt") ||
+              s.includes("to") ||
+              s.includes("end") ||
+              s.includes("bottom")) &&
+            depthEndColIndex === -1
+          ) {
+            depthEndColIndex = c;
+          }
+          if (
+            (s.includes("vs") ||
+              s.includes("hız") ||
+              s.includes("velocity") ||
+              s.includes("speed") ||
+              s === "v") &&
+            vsColIndex === -1
+          ) {
+            vsColIndex = c;
+          }
+        }
         if (
-          !row.some(
-            (cell) => typeof cell === "string" && cell.includes("İSTASYON KODU")
-          )
-        ) {
-          continue; // İSTASYON KODU satırı değilse atla
+          nameColIndex !== -1 &&
+          depthStartColIndex !== -1 &&
+          depthEndColIndex !== -1 &&
+          vsColIndex !== -1
+        )
+          break;
+      }
+
+      if (headerRowIndex === -1) return;
+
+      // Sıralı gruplama ile ölçümleri oluştur
+      let currentName = "";
+      let currentMethod = "MOC";
+      let currentCity = sheetName;
+      let currentDistrict = "";
+      let layerIdCounter = 1;
+      let currentLayers: Layer[] = [];
+
+      const finalize = () => {
+        if (currentLayers.length === 0) return;
+        const baseName = currentName || "İstasyon";
+        const display = `${currentCity} - ${currentDistrict} - ${baseName}`
+          .replace(/ -  - /g, " - ")
+          .replace(/ - $/, "");
+        presets.push({
+          name: `${display} (${currentMethod})`,
+          layers: [...currentLayers],
+          expected: { Vsa_M1: 0, Vsa_M2: 0, Vsa_M3: 0, Vsa_M4: 0 },
+          defaultRho: 1900,
+          autoDepthMode: "VS30",
+          autoDepthValue: 30.0,
+        });
+        currentLayers = [];
+        layerIdCounter = 1;
+      };
+
+      for (let r = headerRowIndex + 1; r < jsonData.length; r++) {
+        const row = jsonData[r];
+        if (!row) continue;
+        const name = nameColIndex !== -1 ? row[nameColIndex] : null;
+        const method = methodColIndex !== -1 ? row[methodColIndex] : null;
+        const city = cityColIndex !== -1 ? row[cityColIndex] : null;
+        const district = districtColIndex !== -1 ? row[districtColIndex] : null;
+        const depthStart =
+          depthStartColIndex !== -1 ? row[depthStartColIndex] : null;
+        const depthEnd = depthEndColIndex !== -1 ? row[depthEndColIndex] : null;
+        const vs = vsColIndex !== -1 ? row[vsColIndex] : null;
+
+        const nextName = typeof name === "string" ? name.trim() : "";
+        const nextMethod =
+          typeof method === "string" ? method.trim().toUpperCase() : "";
+        const nextCity = typeof city === "string" ? city.trim() : "";
+        const nextDistrict =
+          typeof district === "string" ? district.trim() : "";
+
+        const headerPresent =
+          !!nextName || !!nextMethod || !!nextCity || !!nextDistrict;
+        const headerChanged =
+          (nextName && nextName !== currentName) ||
+          (nextMethod && nextMethod !== currentMethod) ||
+          (nextCity && nextCity !== currentCity) ||
+          (nextDistrict && nextDistrict !== currentDistrict);
+
+        if (headerPresent && headerChanged) {
+          finalize();
+          if (nextName) currentName = nextName;
+          if (nextMethod) currentMethod = nextMethod || currentMethod;
+          if (nextCity) currentCity = nextCity;
+          if (nextDistrict) currentDistrict = nextDistrict;
+        } else if (headerPresent && currentLayers.length === 0) {
+          if (nextName) currentName = nextName;
+          if (nextMethod) currentMethod = nextMethod || currentMethod;
+          if (nextCity) currentCity = nextCity;
+          if (nextDistrict) currentDistrict = nextDistrict;
         }
 
-        const istasyonRowIndex = rowIndex;
-        const ilRowIndex = istasyonRowIndex - 2;
-        const ilceRowIndex = istasyonRowIndex - 1;
-        const headerRowIndex = istasyonRowIndex + 1;
-
-        // Bu satırdaki tüm ölçümleri işle
-        for (let col = 0; col < row.length; col += 4) {
-          const istasyonKoduCell = row[col + 1];
-          const derinlikBasHeader = jsonData[headerRowIndex]?.[col];
-
-          // Bu sütun bloğunun geçerli bir ölçüm olup olmadığını kontrol et
-          if (
-            !istasyonKoduCell ||
-            typeof derinlikBasHeader !== "string" ||
-            !derinlikBasHeader.toLowerCase().includes("derinlik")
-          ) {
-            continue; // Geçerli değilse bir sonraki bloğa geç
+        if (depthStart != null && depthEnd != null && vs != null) {
+          const d1 = parseFloat(String(depthStart));
+          const d2 = parseFloat(String(depthEnd));
+          const v = parseFloat(String(vs));
+          if (!isNaN(d1) && !isNaN(d2) && !isNaN(v) && v > 0 && d2 > d1) {
+            currentLayers.push({
+              id: (layerIdCounter++).toString(),
+              d: d2 - d1,
+              vs: v,
+              rho: "",
+            });
           }
-
-          // Ölçüm bilgilerini çıkar
-          const il = jsonData[ilRowIndex]?.[col + 1] || sheetName;
-          const ilce = jsonData[ilceRowIndex]?.[col + 1] || "Bilinmiyor";
-          const istasyonKodu = istasyonKoduCell;
-          const presetName = `${il} - ${ilce} - ${istasyonKodu}`.trim();
-
-          const layers: Layer[] = [];
-          let layerIdCounter = 1;
-
-          // Başlık satırının altından başlayarak katman verilerini oku
-          for (
-            let dataRow = headerRowIndex + 1;
-            dataRow < jsonData.length;
-            dataRow++
-          ) {
-            const rowData = jsonData[dataRow];
-            if (!rowData || rowData.length <= col) break;
-
-            const derinlikBas = rowData[col];
-            const derinlikSon = rowData[col + 1];
-            const vs = rowData[col + 2];
-
-            // Veri satırının sonuna gelip gelmediğimizi kontrol et
-            if (derinlikBas == null || derinlikSon == null || vs == null) {
-              break;
-            }
-
-            const derinlikBasNum = parseFloat(derinlikBas);
-            const derinlikSonNum = parseFloat(derinlikSon);
-            const vsNum = parseFloat(vs);
-
-            // Değerler sayısal ve geçerli ise katmanı ekle
-            if (
-              !isNaN(derinlikBasNum) &&
-              !isNaN(derinlikSonNum) &&
-              !isNaN(vsNum) &&
-              vsNum > 0 &&
-              derinlikSonNum > derinlikBasNum
-            ) {
-              const thickness = derinlikSonNum - derinlikBasNum;
-              layers.push({
-                id: (layerIdCounter++).toString(),
-                d: thickness, // Kalınlığı hesapla
-                vs: vsNum,
-                rho: "", // Yoğunluk verisi bu formatta yok, varsayılan kullanılacak
-              });
-            } else {
-              // Geçersiz veri varsa bu ölçümün katmanlarını okumayı bitir
-              break;
-            }
-          }
-
-          // Eğer ölçüme en az bir katman eklendiyse preset olarak ekle
-          if (layers.length > 0) {
-            const preset: Preset = {
-              name: presetName,
-              layers: layers,
-              expected: {
-                Vsa_M1: 0, // Excel'de beklenen değerler yok, 0 olarak bırak
-                Vsa_M2: 0,
-                Vsa_M3: 0,
-                Vsa_M4: 0,
-              },
-              defaultRho: 1900,
-              autoDepthMode: "VS30", // Varsayılan olarak VS30 kullan
-              autoDepthValue: 30.0,
-            };
-            presets.push(preset);
-          }
+        } else {
+          const isRowEmpty =
+            !nextName &&
+            !nextMethod &&
+            !nextCity &&
+            !nextDistrict &&
+            !depthStart &&
+            !depthEnd &&
+            !vs;
+          if (isRowEmpty && currentLayers.length > 0) finalize();
         }
       }
+
+      finalize();
     });
 
     return presets;
