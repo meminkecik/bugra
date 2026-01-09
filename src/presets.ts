@@ -13,9 +13,10 @@ export type Preset = {
     Vsa_M5?: number;
     Vsa_M6?: number;
     Vsa_M7?: number;
+    Exact?: number;
   };
   defaultRho: number; // kg/m³
-  autoDepthMode: "VS30" | "CUSTOM"; // Otomatik derinlik modu
+  autoDepthMode: "VS30" | "SITE_HS" | "CUSTOM"; // Otomatik derinlik modu
   autoDepthValue: number; // Otomatik derinlik değeri (m)
 };
 
@@ -39,8 +40,8 @@ export const PRESETS: Preset[] = [
       Vsa_M7: 382,
     },
     defaultRho: 1900,
-    autoDepthMode: "VS30",
-    autoDepthValue: 30.0,
+    autoDepthMode: "SITE_HS",
+    autoDepthValue: 35.5,
   },
   {
     name: "Takabatake",
@@ -61,8 +62,8 @@ export const PRESETS: Preset[] = [
       Vsa_M7: 226,
     },
     defaultRho: 1900,
-    autoDepthMode: "CUSTOM",
-    autoDepthValue: 27.0,
+    autoDepthMode: "SITE_HS",
+    autoDepthValue: 29.0,
   },
   {
     name: "Hasanoğlu",
@@ -84,8 +85,8 @@ export const PRESETS: Preset[] = [
       Vsa_M7: 343,
     },
     defaultRho: 1900,
-    autoDepthMode: "CUSTOM",
-    autoDepthValue: 55.0,
+    autoDepthMode: "SITE_HS",
+    autoDepthValue: 85.0,
   },
   {
     name: "Antakya (3126)",
@@ -111,8 +112,8 @@ export const PRESETS: Preset[] = [
       Vsa_M7: 427,
     },
     defaultRho: 1900,
-    autoDepthMode: "VS30",
-    autoDepthValue: 30.0,
+    autoDepthMode: "SITE_HS",
+    autoDepthValue: 34.82,
   },
   {
     name: "Dulkadiroğlu (4621)",
@@ -135,7 +136,7 @@ export const PRESETS: Preset[] = [
       Vsa_M7: 810,
     },
     defaultRho: 1900,
-    autoDepthMode: "VS30",
-    autoDepthValue: 30.0,
+    autoDepthMode: "SITE_HS",
+    autoDepthValue: 36.07,
   },
 ];

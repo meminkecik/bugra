@@ -691,8 +691,7 @@ export function exportToExcel(
       "Hesaplama Yöntemi",
       "Katman Sayısı",
       "Toplam Derinlik (m)",
-      "H (M1/M2) (m)",
-      "H (M3) (m)",
+      "H (m)",
       "Vsa M1 (m/s)",
       "Vsa M2 (m/s)",
       "Vsa M3 (m/s)",
@@ -700,13 +699,7 @@ export function exportToExcel(
       "Vsa M5 (m/s)",
       "Vsa M6 (m/s)",
       "Vsa M7 (m/s)",
-      "VS30 - Vsa M1 (m/s)",
-      "VS30 - Vsa M2 (m/s)",
-      "VS30 - Vsa M3 (m/s)",
-      "VS30 - Vsa M4 (m/s)",
-      "VS30 - Vsa M5 (m/s)",
-      "VS30 - Vsa M6 (m/s)",
-      "VS30 - Vsa M7 (m/s)",
+      "Vsa Exact (m/s)",
     ],
     ...results.map((result, index) => {
       const location = parseLocationInfo(
@@ -717,7 +710,6 @@ export function exportToExcel(
         measurement?.layers.reduce((sum, layer) => sum + Number(layer.d), 0) ||
         0;
 
-      const vs30Result = vs30Results[index];
       return [
         location.sehir,
         location.ilce,
@@ -725,8 +717,7 @@ export function exportToExcel(
         measurement?.method || "MOC",
         measurement?.layers.length.toString() || "0",
         totalDepth.toFixed(2),
-        result.H_M12.toFixed(2),
-        result.H_M3.toFixed(2),
+        result.H_used.toFixed(2),
         result.Vsa_M1.toFixed(1),
         result.Vsa_M2.toFixed(1),
         result.Vsa_M3.toFixed(1),
@@ -734,46 +725,10 @@ export function exportToExcel(
         result.Vsa_M5?.toFixed(1) || "—",
         result.Vsa_M6?.toFixed(1) || "—",
         result.Vsa_M7?.toFixed(1) || "—",
-        vs30Result?.Vsa_M1.toFixed(1) || "—",
-        vs30Result?.Vsa_M2.toFixed(1) || "—",
-        vs30Result?.Vsa_M3.toFixed(1) || "—",
-        vs30Result?.Vsa_M4.toFixed(1) || "—",
-        vs30Result?.Vsa_M5?.toFixed(1) || "—",
-        vs30Result?.Vsa_M6?.toFixed(1) || "—",
-        vs30Result?.Vsa_M7?.toFixed(1) || "—",
+        result.Vsa_Exact?.toFixed(1) || "—",
       ];
     }),
   ];
-
-  // T periyotları da ekle
-  const hasTValues = results.some((r) => r.T_M1 || r.T_M2 || r.T_M3);
-  if (hasTValues) {
-    resultData.push([""]);
-    resultData.push(["T Periyotları Özeti"]);
-    resultData.push([
-      "Şehir",
-      "İlçe",
-      "İstasyon Kodu",
-      "T M1 (s)",
-      "T M2 (s)",
-      "T M3 (s)",
-    ]);
-    resultData.push(
-      ...results.map((result, index) => {
-        const location = parseLocationInfo(
-          measurements[index]?.name || `Ölçüm ${index + 1}`
-        );
-        return [
-          location.sehir,
-          location.ilce,
-          location.istasyon,
-          result.T_M1?.toFixed(3) || "—",
-          result.T_M2?.toFixed(3) || "—",
-          result.T_M3?.toFixed(3) || "—",
-        ];
-      })
-    );
-  }
 
   // Excel çalışma kitabı oluştur
   const wb = XLSX.utils.book_new();
@@ -784,10 +739,10 @@ export function exportToExcel(
     { wch: 15 }, // Şehir
     { wch: 15 }, // İlçe
     { wch: 25 }, // İstasyon Kodu
+    { wch: 15 }, // Hesaplama Yöntemi
     { wch: 12 }, // Katman Sayısı
     { wch: 15 }, // Toplam Derinlik
-    { wch: 12 }, // H (M1/M2)
-    { wch: 12 }, // H (M3)
+    { wch: 12 }, // H
     { wch: 12 }, // Vsa M1
     { wch: 12 }, // Vsa M2
     { wch: 12 }, // Vsa M3
@@ -795,13 +750,7 @@ export function exportToExcel(
     { wch: 12 }, // Vsa M5
     { wch: 12 }, // Vsa M6
     { wch: 12 }, // Vsa M7
-    { wch: 15 }, // VS30 - Vsa M1
-    { wch: 15 }, // VS30 - Vsa M2
-    { wch: 15 }, // VS30 - Vsa M3
-    { wch: 15 }, // VS30 - Vsa M4
-    { wch: 15 }, // VS30 - Vsa M5
-    { wch: 15 }, // VS30 - Vsa M6
-    { wch: 15 }, // VS30 - Vsa M7
+    { wch: 12 }, // Vsa Exact
   ];
   XLSX.utils.book_append_sheet(wb, summaryWs, "VSA Özet Sonuçları");
 
@@ -997,28 +946,27 @@ export function exportToExcel(
         [""],
         ["Hesaplama Sonuçları"],
         ["Parametre", "Değer", "Birim"],
-        ["H (M1/M2)", result.H_M12.toFixed(2), "m"],
-        ["H (M3)", result.H_M3.toFixed(2), "m"],
+        ["H (Toplam)", result.H_used.toFixed(2), "m"],
         ["Vsa M1", result.Vsa_M1.toFixed(1), "m/s"],
         ["Vsa M2", result.Vsa_M2.toFixed(1), "m/s"],
-        ["Vsa M3", result.Vsa_M3.toFixed(1), "m/s"],
+        ["Vsa M3 (MOC)", result.Vsa_M3.toFixed(1), "m/s"],
         ["Vsa M4", result.Vsa_M4.toFixed(1), "m/s"],
         ["Vsa M5", result.Vsa_M5?.toFixed(1) || "—", "m/s"],
         ["Vsa M6", result.Vsa_M6?.toFixed(1) || "—", "m/s"],
         ["Vsa M7", result.Vsa_M7?.toFixed(1) || "—", "m/s"],
+        ["Vsa Exact", result.Vsa_Exact?.toFixed(1) || "—", "m/s"],
       ];
 
       // VS30 sonuçlarını ekle
       const vs30Result = vs30Results[index];
       if (vs30Result) {
         detailData.push([""]);
-        detailData.push(["VS30 Hesaplama Sonuçları (30m derinlik)"]);
+        detailData.push(["VS30 Hesaplama Sonuçları"]);
         detailData.push(["Parametre", "Değer", "Birim"]);
-        detailData.push(["H (M1/M2)", vs30Result.H_M12.toFixed(2), "m"]);
-        detailData.push(["H (M3)", vs30Result.H_M3.toFixed(2), "m"]);
+        detailData.push(["H (Toplam)", vs30Result.H_used.toFixed(2), "m"]);
         detailData.push(["Vsa M1", vs30Result.Vsa_M1.toFixed(1), "m/s"]);
         detailData.push(["Vsa M2", vs30Result.Vsa_M2.toFixed(1), "m/s"]);
-        detailData.push(["Vsa M3", vs30Result.Vsa_M3.toFixed(1), "m/s"]);
+        detailData.push(["Vsa M3 (MOC)", vs30Result.Vsa_M3.toFixed(1), "m/s"]);
         detailData.push(["Vsa M4", vs30Result.Vsa_M4.toFixed(1), "m/s"]);
         detailData.push([
           "Vsa M5",
@@ -1035,15 +983,11 @@ export function exportToExcel(
           vs30Result.Vsa_M7?.toFixed(1) || "—",
           "m/s",
         ]);
-      }
-
-      if (result.T_M1 || result.T_M2 || result.T_M3) {
-        detailData.push([""]);
-        detailData.push(["T Periyotları"]);
-        detailData.push(["Parametre", "Değer", "Birim"]);
-        if (result.T_M1) detailData.push(["T M1", result.T_M1.toFixed(3), "s"]);
-        if (result.T_M2) detailData.push(["T M2", result.T_M2.toFixed(3), "s"]);
-        if (result.T_M3) detailData.push(["T M3", result.T_M3.toFixed(3), "s"]);
+        detailData.push([
+          "Vsa Exact",
+          vs30Result.Vsa_Exact?.toFixed(1) || "—",
+          "m/s",
+        ]);
       }
 
       const detailWs = XLSX.utils.aoa_to_sheet(detailData);

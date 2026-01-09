@@ -1,5 +1,4 @@
 // src/lib/calc.ts
-import type { Preset } from "../presets";
 
 export type Layer = {
   id: string;
@@ -9,18 +8,15 @@ export type Layer = {
 };
 
 export type Result = {
-  H_M12: number; // M1/M2'de kullanılan H
-  H_M3: number; // M3'te kullanılan H (Hs)
+  H_used: number;    // Hesaplamada kullanılan toplam derinlik
   Vsa_M1: number;
   Vsa_M2: number;
-  Vsa_M3: number;
+  Vsa_M3: number;    // Meksika Kodu (MOC)
   Vsa_M4: number;
   Vsa_M5: number | null;
   Vsa_M6: number | null;
-  Vsa_M7: number | null;
-  T_M1: number | null;
-  T_M2: number | null;
-  T_M3: number | null;
+  Vsa_M7: number | null; // Önerilen Yöntem
+  Vsa_Exact: number | null; // Makaledeki "Exact" sütunu (Transfer Matrix)
 };
 
 /** --------------------------- yardımcılar --------------------------- **/
@@ -158,10 +154,8 @@ export function computeTM3_MOC(
 ): number | null {
   if (!layersSurfaceDown.length) return null;
 
-  // Surface→Bedrock giriyor, Bedrock→Surface sırasına çevir
   const bottomUp = [...layersSurfaceDown].reverse();
 
-  // Σ(d/G) ve w arayüzleri (w[0]=0 taban, w[N]=1 yüzey)
   const parts: number[] = [];
   let sum_d_over_G = 0;
   for (const L of bottomUp) {
@@ -195,13 +189,18 @@ export function computeTM3_MOC(
     const d = L.d;
     const wb = w[k],
       wt = w[k + 1];
-    // DÜZELTME: Formül ortalama aldığı için 3'e bölünmelidir.
-    sum_rho_d_w2 += (rho * d * (wt * wt + wt * wb + wb * wb)) / 3;
+
+    // --- DÜZELTME BAŞLANGICI ---
+    // Makale Tablo 1'deki formülde  ve Meksika yönetmeliği uygulamasında
+    // integralden gelen 1/3 çarpanı bu toplamın içinde yer almaz.
+    // Önceki kodda: ... / 3 vardı. Bunu kaldırıyoruz.
+    
+    sum_rho_d_w2 += rho * d * (wt * wt + wt * wb + wb * wb);
+    
+    // --- DÜZELTME BİTİŞİ ---
   }
   if (!(sum_rho_d_w2 > 0)) return null;
 
-  // T = 4 * sqrt( Σ(d/G) * Σ(ρ d (...) ) )
-  // Not: Makaledeki formülde 1/3 terimi Σ(ρ d ...) içindedir.
   return 4 * Math.sqrt(sum_d_over_G * sum_rho_d_w2);
 }
 
@@ -397,40 +396,42 @@ export function computeTM7_PROPOSED(
   const d: number[] = [];
   const rho: number[] = [];
   const G: number[] = [];
+
   for (let i = 0; i < n; i++) {
     const Li = bottomUp[i];
     if (typeof Li.d !== "number" || Li.d <= 0) return null;
     if (typeof Li.vs !== "number" || Li.vs <= 0) return null;
+    
+    // Rho kontrolü
     const rhoVal = normalizeRho(
       typeof Li.rho === "number" ? Li.rho : defaultRhoKgPerM3
     );
     if (!(rhoVal > 0)) return null;
+
     d[i] = Li.d;
     rho[i] = rhoVal;
     G[i] = computeG(Li.vs, rhoVal);
-    if (!(G[i] > 0)) return null;
   }
 
-  // S_i: i katmanının ortasındaki kesme kuvvetini temsil eden kütle
-  // (üstteki katmanların toplam kütlesi + mevcut katmanın kütlesinin yarısı)
+  // S_i Hesabı (Kümülatif kütle)
   const S: number[] = [];
   let cumMassAbove = 0;
+  // Yüzeyden aşağı (n-1 -> 0)
   for (let i = n - 1; i >= 0; i--) {
-    // Yüzeyden aşağıya
     S[i] = cumMassAbove + (rho[i] * d[i]) / 2;
     cumMassAbove += rho[i] * d[i];
   }
 
-  // sum_term = y_top, yani toplam statik yer değiştirme.
-  // y_top = Σ (V_i * h_i / A*G_i) -> V_i/A ~ S_i.
   let sum_term = 0;
   for (let i = 0; i < n; i++) {
-    // Tabandan yukarıya
     sum_term += (S[i] * d[i]) / G[i];
   }
+
   if (!(sum_term > 0)) return null;
 
   const k = n === 1 && useSingleLayerConstant ? 4 * Math.sqrt(2) : 5.515;
+  
+  // Makale Örnek 310 ile uyumlu: Karekök toplamın dışında.
   return k * Math.sqrt(sum_term);
 }
 
@@ -451,68 +452,78 @@ export function computeT(H: number, Vsa: number | null): number | null {
 /** --------------------------- Sonuçlar --------------------------- **/
 /**
  * m3DepthMode:
- *  - "TOTAL": M3 için Hs = toplam profil kalınlığı
- *  - "TARGET": M3 için Hs = targetDepthM3 (örn. Vs30 için 30 m)
+ *  - "TOTAL": M3, M6, M7, Exact için tüm profil derinliği kullanılır
+ *  - "TARGET": M3, M6, M7, Exact için targetDepthM3 (örn. Vs30 için 30 m) kullanılır
  * m3Formula:
  *  - "MOC": T_s = 4 * sqrt( (Σ d/G) * (Σ ρ d avg(w^2)) )
  *  - "RAYLEIGH": T = 2π * sqrt( Σ m_i δ_i² / Σ f_i δ_i )
  *  - "EXACT": Transfer Matrix Method ile tam doğal periyot hesabı
+ * 
+ * @param targetDepthM12 - M1, M2, M4, M5 için hedef derinlik (varsayılan: tüm profil)
+ * @param targetDepthM3 - M3, M6, M7, Exact için hedef derinlik (varsayılan: 30m)
  */
 export function computeResults(
   layersSurfaceDown: Layer[],
-  showT: boolean,
   defaultRho: number = 1900,
-  targetDepthM12: number = Number.POSITIVE_INFINITY,
-  targetDepthM3: number = 30,
-  m3DepthMode: "TOTAL" | "TARGET" = "TOTAL",
-  m3Formula: "MOC" | "RAYLEIGH" | "EXACT" = "EXACT"
+  targetDepthM12: number = Number.POSITIVE_INFINITY, // M1, M2, M4, M5 için
+  targetDepthM3: number = Number.POSITIVE_INFINITY, // M3, M6, M7 için (varsayılan: tüm profil)
+  m3DepthMode: "TOTAL" | "TARGET" = "TOTAL", 
+  m3Formula: "MOC" | "RAYLEIGH" | "EXACT" = "MOC"
 ): Result | null {
+
+  // 1. Grup: M1, M2, M4, M5 (Geometrik Metodlar)
   const Ls12 = isFinite(targetDepthM12)
     ? trimLayersToDepth(layersSurfaceDown, targetDepthM12)
     : layersSurfaceDown;
+    
   if (!Ls12.length) return null;
+
+  // 2. Grup: M3, M6, M7, Exact (Kütle/Transfer Metodları)
   let Ls3: Layer[], H3: number;
+  
   if (m3DepthMode === "TOTAL") {
-    Ls3 = layersSurfaceDown;
+    // "TOTAL" modunda: targetDepth ne olursa olsun, eldeki tüm katmanları kullan
+    Ls3 = layersSurfaceDown; 
     H3 = computeProfileDepth(layersSurfaceDown);
   } else {
+    // "TARGET" modunda: Verilen targetDepthM3'e (örn: 30m) kadar kes
     Ls3 = trimLayersToDepth(layersSurfaceDown, targetDepthM3);
     H3 = computeH(Ls3);
   }
+
   if (!Ls3.length || !(H3 > 0)) return null;
-  const baseForM67 = m3DepthMode === "TARGET" ? Ls3 : Ls12;
-  const H12 = computeH(Ls12);
+
+  // Temel Geometrik Yöntemler (M1, M2, M4, M5) - Ls12 kullanır
   const Vsa_M1 = computeVsaM1(Ls12);
   const Vsa_M2 = computeVsaM2(Ls12);
   const Vsa_M4 = computeVsaM4(Ls12);
   const Vsa_M5 = computeVsaM5(Ls12);
-  const Vsa_M6 = computeVsaM6(baseForM67, defaultRho);
-  const Vsa_M7 = computeVsaM7(baseForM67, defaultRho);
+
+  // Kütle Bazlı Yöntemler (M6, M7) - Ls3 kullanır
+  const Vsa_M6 = computeVsaM6(Ls3, defaultRho);
+  const Vsa_M7 = computeVsaM7(Ls3, defaultRho);
 
   if (
-    !(H12 > 0) ||
-    Vsa_M1 == null ||
-    Vsa_M2 == null ||
-    Vsa_M4 == null ||
-    Vsa_M5 == null ||
-    Vsa_M6 == null ||
-    Vsa_M7 == null
-  )
-    return null;
+    Vsa_M1 == null || Vsa_M2 == null || Vsa_M4 == null || 
+    Vsa_M5 == null || Vsa_M6 == null || Vsa_M7 == null
+  ) return null;
 
-  const T_M3_tmp =
-    m3Formula === "MOC"
-      ? computeTM3_MOC(Ls3, defaultRho)
-      : m3Formula === "RAYLEIGH"
-      ? computeTM3_RAYLEIGH(Ls3, defaultRho)
-      : computeTM3_EXACT(Ls3, defaultRho);
+  // --- M3 (Meksika Kodu - MOC veya seçilen formül) ---
+  const T_M3 = m3Formula === "MOC"
+    ? computeTM3_MOC(Ls3, defaultRho)
+    : m3Formula === "RAYLEIGH"
+    ? computeTM3_RAYLEIGH(Ls3, defaultRho)
+    : computeTM3_EXACT(Ls3, defaultRho);
+  const Vsa_M3 = computeVsaFromT(H3, T_M3);
 
-  const Vsa_M3 = computeVsaFromT(H3, T_M3_tmp);
-  if (Vsa_M3 == null) return null;
+  // --- Exact (Transfer Matrix) ---
+  const T_Exact = computeTM3_EXACT(Ls3, defaultRho);
+  const Vsa_Exact = computeVsaFromT(H3, T_Exact);
 
-  const result: Result = {
-    H_M12: H12,
-    H_M3: H3,
+  if (Vsa_M3 == null || Vsa_Exact == null) return null;
+
+  return {
+    H_used: H3, // M3/Exact derinliğini "kullanılan derinlik" olarak raporluyoruz
     Vsa_M1,
     Vsa_M2,
     Vsa_M3,
@@ -520,17 +531,8 @@ export function computeResults(
     Vsa_M5,
     Vsa_M6,
     Vsa_M7,
-    T_M1: null,
-    T_M2: null,
-    T_M3: null,
+    Vsa_Exact,
   };
-
-  if (showT) {
-    result.T_M1 = computeT(H12, Vsa_M1);
-    result.T_M2 = computeT(H12, Vsa_M2);
-    result.T_M3 = T_M3_tmp ?? null;
-  }
-  return result;
 }
 
 /** Basit doğrulama */
@@ -762,76 +764,4 @@ export function analyzeDeviations(
     highDeviations,
     needsNarrowing: highDeviations.length > 0,
   };
-}
-
-export function generateGeotechnicalReport(
-  preset: Preset,
-  depthMode: "VS30" | "CUSTOM",
-  targetDepth: number,
-  result: Result,
-  showT: boolean = true
-): string {
-  const analysis = analyzeDeviations(result, preset.expected);
-  const report = {
-    metadata: {
-      timestamp: new Date().toISOString(),
-      preset: preset.name,
-      depthMode: depthMode,
-      targetDepth: `${targetDepth.toFixed(1)} m`,
-      usedDepthM12: `${result.H_M12.toFixed(1)} m`,
-      usedDepthM3: `${result.H_M3.toFixed(1)} m`,
-    },
-    input: {
-      layers: preset.layers,
-      defaultRho: preset.defaultRho,
-      showT: showT,
-    },
-    results: {
-      H_M12: result.H_M12,
-      H_M3: result.H_M3,
-      Vsa_M1: result.Vsa_M1,
-      Vsa_M2: result.Vsa_M2,
-      Vsa_M3: result.Vsa_M3,
-      Vsa_M4: result.Vsa_M4,
-      Vsa_M5: result.Vsa_M5,
-      Vsa_M6: result.Vsa_M6,
-      Vsa_M7: result.Vsa_M7,
-      ...(showT && {
-        T_M1: result.T_M1,
-        T_M2: result.T_M2,
-        T_M3: result.T_M3,
-      }),
-    },
-    expected: preset.expected,
-    analysis: {
-      deviations: analysis.deviations,
-      highDeviations: analysis.highDeviations,
-      needsNarrowing: analysis.needsNarrowing,
-      recommendation: analysis.needsNarrowing
-        ? "Derinlik aralığını daraltmamı ister misiniz?"
-        : "Sapmalar kabul edilebilir seviyede (%5'den küçük)",
-    },
-  };
-  return JSON.stringify(report, null, 2);
-}
-
-export function autoConfigureDepthForPreset(preset: Preset): {
-  depthMode: "VS30" | "CUSTOM";
-  targetDepth: number;
-} {
-  return {
-    depthMode: preset.autoDepthMode,
-    targetDepth: preset.autoDepthValue,
-  };
-}
-
-export function suggestNarrowedDepth(
-  currentDepth: number,
-  deviation: number,
-  direction: "increase" | "decrease"
-): number {
-  const factor = deviation > 10 ? 0.8 : 0.9;
-  return direction === "increase"
-    ? currentDepth * (2 - factor)
-    : currentDepth * factor;
 }

@@ -2,11 +2,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import {
   computeResults,
   validateLayer,
-  calibrateDepthForTargetVsaM3,
-  analyzeDeviations,
-  generateGeotechnicalReport,
-  autoConfigureDepthForPreset,
-  suggestNarrowedDepth,
+  computeH,
   type Layer,
   type Result,
 } from "./lib/calc";
@@ -31,9 +27,8 @@ function App() {
     { id: "2", d: 10, vs: 300, rho: "" },
     { id: "3", d: 15, vs: 600, rho: "" },
   ]);
-  const [showT, setShowT] = useState(false);
   const [defaultRho, setDefaultRho] = useState(1900);
-  const [depthMode, setDepthMode] = useState<DepthMode>("VS30");
+  const [depthMode, setDepthMode] = useState<DepthMode>("SITE_HS");
   const [customDepth, setCustomDepth] = useState<number>(30);
   const [currentPreset, setCurrentPreset] = useState<Preset | null>(null);
   const [availablePresets, setAvailablePresets] = useState<Preset[]>(PRESETS);
@@ -66,56 +61,87 @@ function App() {
   // Hedef derinliği belirle
   const targetDepth = useMemo(() => {
     if (depthMode === "VS30") return 30;
-    if (depthMode === "SITE_HS") return 9999; // efektif "tüm profil"
+    if (depthMode === "SITE_HS") return Number.POSITIVE_INFINITY; // tüm profil
     return Math.max(1, Number(customDepth) || 30);
   }, [depthMode, customDepth]);
 
-  // Sonuçları hesapla - Batch hesaplama ile aynı mantık
+  // M3 modu belirle - SITE_HS için TOTAL, diğerleri için TARGET
+  const m3Mode = useMemo(() => {
+    return depthMode === "SITE_HS" ? "TOTAL" : "TARGET";
+  }, [depthMode]);
+
+  // Sonuçları hesapla - Yeni API ile derinlik ve mod parametreleri
   const result = useMemo(() => {
-    // M1, M2 hesaplamaları için de hedef derinliği kullan
-    const targetDepthM12 = targetDepth;
-    const targetDepthM3 = targetDepth;
-    const m3Mode: "TOTAL" | "TARGET" =
-      depthMode === "SITE_HS" ? "TOTAL" : "TARGET"; // VS30/CUSTOM=TARGET, SITE_HS=TOTAL
-
-    // Excel ölçümündeki yöntemi kullan, yoksa varsayılan "EXACT"
-    let m3Formula: "MOC" | "RAYLEIGH" | "EXACT" = "EXACT";
-    if (excelMeasurements.length > 0 && currentMeasurementIndex !== null) {
-      const currentMeasurement = excelMeasurements[currentMeasurementIndex];
-      if (currentMeasurement?.method) {
-        const method = currentMeasurement.method.toUpperCase();
-        if (method === "MOC" || method === "RAYLEIGH" || method === "EXACT") {
-          m3Formula = method as "MOC" | "RAYLEIGH" | "EXACT";
-        }
-      }
-    }
-
     return computeResults(
       layers,
-      showT,
       defaultRho,
-      targetDepthM12,
-      targetDepthM3,
-      m3Mode,
-      m3Formula
+      targetDepth,  // M1, M2, M4, M5 için derinlik
+      targetDepth,  // M3, M6, M7 için hedef derinlik
+      m3Mode as "TOTAL" | "TARGET",
+      "MOC"
     );
-  }, [
-    layers,
-    showT,
-    defaultRho,
-    targetDepth,
-    depthMode,
-    excelMeasurements,
-    currentMeasurementIndex,
-  ]);
+  }, [layers, defaultRho, targetDepth, m3Mode]);
 
   // Sapma analizi
   useEffect(() => {
     if (result && currentPreset) {
-      const analysis = analyzeDeviations(result, currentPreset.expected);
+      const analysis = analyzeDeviationsSimple(result, currentPreset.expected);
       setDeviationAnalysis(analysis);
     }
   }, [result, currentPreset]);
+
+// Basit sapma analizi fonksiyonu
+function analyzeDeviationsSimple(
+  result: Result,
+  expected: {
+    Vsa_M1: number;
+    Vsa_M2: number;
+    Vsa_M3: number;
+    Vsa_M4?: number;
+    Vsa_M5?: number;
+    Vsa_M6?: number;
+    Vsa_M7?: number;
+    Exact?: number;
+  }
+): {
+  deviations: {
+    M1: number;
+    M2: number;
+    M3: number;
+    M4?: number;
+    M5?: number;
+    M6?: number;
+    M7?: number;
+    Exact?: number;
+  };
+  highDeviations: string[];
+  needsNarrowing: boolean;
+} {
+  const calcDev = (calc: number, exp: number) => Math.abs((calc - exp) / exp) * 100;
+  const isHigh = (calc: number, exp: number) => calcDev(calc, exp) > 5;
+
+  const deviations = {
+    M1: calcDev(result.Vsa_M1, expected.Vsa_M1),
+    M2: calcDev(result.Vsa_M2, expected.Vsa_M2),
+    M3: calcDev(result.Vsa_M3, expected.Vsa_M3),
+    ...(expected.Vsa_M4 && { M4: calcDev(result.Vsa_M4, expected.Vsa_M4) }),
+    ...(expected.Vsa_M5 && result.Vsa_M5 && { M5: calcDev(result.Vsa_M5, expected.Vsa_M5) }),
+    ...(expected.Vsa_M6 && result.Vsa_M6 && { M6: calcDev(result.Vsa_M6, expected.Vsa_M6) }),
+    ...(expected.Vsa_M7 && result.Vsa_M7 && { M7: calcDev(result.Vsa_M7, expected.Vsa_M7) }),
+    ...(expected.Exact && result.Vsa_Exact && { Exact: calcDev(result.Vsa_Exact, expected.Exact) }),
+  };
+
+  const highDeviations: string[] = [];
+  if (isHigh(result.Vsa_M1, expected.Vsa_M1)) highDeviations.push(`M1: %${deviations.M1.toFixed(1)}`);
+  if (isHigh(result.Vsa_M2, expected.Vsa_M2)) highDeviations.push(`M2: %${deviations.M2.toFixed(1)}`);
+  if (isHigh(result.Vsa_M3, expected.Vsa_M3)) highDeviations.push(`M3: %${deviations.M3.toFixed(1)}`);
+  if (expected.Vsa_M4 && isHigh(result.Vsa_M4, expected.Vsa_M4)) highDeviations.push(`M4: %${deviations.M4!.toFixed(1)}`);
+  if (expected.Vsa_M5 && result.Vsa_M5 && isHigh(result.Vsa_M5, expected.Vsa_M5)) highDeviations.push(`M5: %${deviations.M5!.toFixed(1)}`);
+  if (expected.Vsa_M6 && result.Vsa_M6 && isHigh(result.Vsa_M6, expected.Vsa_M6)) highDeviations.push(`M6: %${deviations.M6!.toFixed(1)}`);
+  if (expected.Vsa_M7 && result.Vsa_M7 && isHigh(result.Vsa_M7, expected.Vsa_M7)) highDeviations.push(`M7: %${deviations.M7!.toFixed(1)}`);
+
+  return { deviations, highDeviations, needsNarrowing: highDeviations.length > 0 };
+}
 
   // Hataları hesapla
   const errors = useMemo(() => {
@@ -162,39 +188,26 @@ function App() {
     setDefaultRho(preset.defaultRho);
     setCurrentPreset(preset);
 
-    // Otomatik derinlik modu ayarla (mevcut)
-    const { depthMode: autoMode, targetDepth: autoDepth } =
-      autoConfigureDepthForPreset(preset);
-
-    // Hedef M3 varsa: derinliği kalibre et (seed = autoDepth)
-    if (preset.expected?.Vsa_M3) {
-      const Hstar = calibrateDepthForTargetVsaM3(
-        preset.layers,
-        preset.defaultRho ?? 1900,
-        preset.expected.Vsa_M3,
-        5,
-        120,
-        0.5,
-        60,
-        autoDepth // seedDepth
-      );
-      if (Hstar) {
-        setDepthMode("CUSTOM");
-        setCustomDepth(Number(Hstar.toFixed(2)));
-        return; // burada bitir, kalibre edilen derinlik kullanılacak
-      }
+    // Preset'in derinlik modunu kullan
+    const totalDepth = computeH(preset.layers);
+    if (preset.autoDepthMode === "VS30") {
+      setDepthMode("VS30");
+      setCustomDepth(30);
+    } else if (preset.autoDepthMode === "CUSTOM" && preset.autoDepthValue) {
+      setDepthMode("CUSTOM");
+      setCustomDepth(preset.autoDepthValue);
+    } else {
+      // SITE_HS veya varsayılan: Saha HS (tüm profil)
+      setDepthMode("SITE_HS");
+      setCustomDepth(totalDepth);
     }
-
-    // Kalibrasyon yapılamazsa fallback:
-    setDepthMode(autoMode === "VS30" ? "VS30" : "CUSTOM");
-    if (autoMode === "CUSTOM") setCustomDepth(autoDepth);
   };
 
   // Derinlik aralığı daraltma önerisi
   const handleNarrowDepth = () => {
     if (!deviationAnalysis || !currentPreset) return;
 
-    // En yüksek sapma olan yöntemi bul (M4, M5, M6 ve M7 dahil)
+    // En yüksek sapma olan yöntemi bul
     const deviations = [
       deviationAnalysis.deviations.M1,
       deviationAnalysis.deviations.M2,
@@ -214,13 +227,9 @@ function App() {
     ];
     const maxDeviation = Math.max(...deviations);
 
-    // M3 için yeni derinlik öner
-    const newDepth = suggestNarrowedDepth(
-      customDepth,
-      maxDeviation,
-      maxDeviation > 10 ? "decrease" : "decrease"
-    );
-
+    // Basit derinlik daraltma
+    const factor = maxDeviation > 10 ? 0.8 : 0.9;
+    const newDepth = customDepth * factor;
     setCustomDepth(Number(newDepth.toFixed(1)));
   };
 
@@ -242,21 +251,35 @@ function App() {
   const downloadGeotechnicalReport = () => {
     if (!result || !currentPreset) return;
 
-    const report = generateGeotechnicalReport(
-      currentPreset,
-      depthMode === "SITE_HS" ? "VS30" : depthMode,
-      targetDepth,
-      result,
-      showT
-    );
+    const report = {
+      metadata: {
+        timestamp: new Date().toISOString(),
+        preset: currentPreset.name,
+        H_used: result.H_used,
+      },
+      input: {
+        layers: currentPreset.layers,
+        defaultRho: currentPreset.defaultRho,
+      },
+      results: {
+        H_used: result.H_used,
+        Vsa_M1: result.Vsa_M1,
+        Vsa_M2: result.Vsa_M2,
+        Vsa_M3: result.Vsa_M3,
+        Vsa_M4: result.Vsa_M4,
+        Vsa_M5: result.Vsa_M5,
+        Vsa_M6: result.Vsa_M6,
+        Vsa_M7: result.Vsa_M7,
+        Vsa_Exact: result.Vsa_Exact,
+      },
+      expected: currentPreset.expected,
+    };
 
-    const blob = new Blob([report], { type: "application/json" });
+    const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `jeoteknik-rapor-${
-      currentPreset.name
-    }-${depthMode.toLowerCase()}.json`;
+    a.download = `jeoteknik-rapor-${currentPreset.name}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -342,19 +365,14 @@ function App() {
     for (const measurement of excelMeasurements) {
       const tempLayers = measurement.layers;
 
-      // Her ölçümün kendi yöntemini kullan
-      const m3Formula: "MOC" | "RAYLEIGH" | "EXACT" =
-        (measurement.method?.toUpperCase() as "MOC" | "RAYLEIGH" | "EXACT") ||
-        "EXACT";
-
+      // Tam profil sonucu (SITE_HS modu gibi)
       const tempResult = computeResults(
         tempLayers,
-        showT,
         defaultRho,
         Number.POSITIVE_INFINITY,
-        targetDepth,
-        depthMode === "SITE_HS" ? "TOTAL" : "TARGET",
-        m3Formula
+        Number.POSITIVE_INFINITY,
+        "TOTAL",
+        "MOC"
       );
 
       if (tempResult) {
@@ -362,8 +380,7 @@ function App() {
       } else {
         // Hata durumunda boş sonuç ekle
         allResults.push({
-          H_M12: 0,
-          H_M3: 0,
+          H_used: 0,
           Vsa_M1: 0,
           Vsa_M2: 0,
           Vsa_M3: 0,
@@ -371,50 +388,34 @@ function App() {
           Vsa_M5: null,
           Vsa_M6: null,
           Vsa_M7: null,
-          T_M1: null,
-          T_M2: null,
-          T_M3: null,
+          Vsa_Exact: null,
         });
       }
     }
 
-    // VS30 hesaplamalarını yap
+    // VS30 hesaplamalarını yap (30m derinlik için)
     const vs30Results: Result[] = [];
     for (const measurement of excelMeasurements) {
-      // Her ölçümün kendi yöntemini kullan
-      const m3Formula: "MOC" | "RAYLEIGH" | "EXACT" =
-        (measurement.method?.toUpperCase() as "MOC" | "RAYLEIGH" | "EXACT") ||
-        "EXACT";
-
-      const tempResult = computeResults(
-        measurement.layers,
-        showT,
+      const tempLayers = measurement.layers;
+      const vs30Result = computeResults(
+        tempLayers,
         defaultRho,
-        30, // VS30 için 30m derinlik
-        30, // VS30 için 30m derinlik
-        "TARGET", // VS30 için TARGET modu
-        m3Formula
+        30,   // M1, M2, M4, M5 için 30m
+        30,   // M3, M6, M7 için 30m
+        "TARGET",
+        "MOC"
       );
-
-      if (tempResult) {
-        vs30Results.push(tempResult);
-      } else {
-        // Hata durumunda boş sonuç ekle
-        vs30Results.push({
-          H_M12: 0,
-          H_M3: 0,
-          Vsa_M1: 0,
-          Vsa_M2: 0,
-          Vsa_M3: 0,
-          Vsa_M4: 0,
-          Vsa_M5: null,
-          Vsa_M6: null,
-          Vsa_M7: null,
-          T_M1: null,
-          T_M2: null,
-          T_M3: null,
-        });
-      }
+      vs30Results.push(vs30Result || {
+        H_used: 0,
+        Vsa_M1: 0,
+        Vsa_M2: 0,
+        Vsa_M3: 0,
+        Vsa_M4: 0,
+        Vsa_M5: null,
+        Vsa_M6: null,
+        Vsa_M7: null,
+        Vsa_Exact: null,
+      });
     }
 
     exportToExcel(
@@ -594,25 +595,14 @@ function App() {
             <h2 className="mb-4 text-xl font-semibold text-blue-900">
               Seçilen Örnek Profil: {currentPreset.name}
             </h2>
-            <div className="grid grid-cols-1 gap-2 text-sm md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-2 text-sm md:grid-cols-2">
               <div>
-                <strong>Derinlik Modu:</strong>{" "}
-                {depthMode === "VS30"
-                  ? "Vs30"
-                  : depthMode === "SITE_HS"
-                  ? "Saha Hs"
-                  : "Özel"}
+                <strong>Toplam Derinlik (H):</strong>{" "}
+                {result?.H_used.toFixed(1) || "—"} m
               </div>
               <div>
-                <strong>Hedef Derinlik:</strong> {targetDepth.toFixed(1)} m
-              </div>
-              <div>
-                <strong>Kullanılan Derinlik (M1/M2):</strong>{" "}
-                {result?.H_M12.toFixed(1) || "—"} m
-              </div>
-              <div>
-                <strong>Kullanılan Derinlik (M3):</strong>{" "}
-                {result?.H_M3.toFixed(1) || "—"} m
+                <strong>Varsayılan Yoğunluk:</strong>{" "}
+                {currentPreset.defaultRho} kg/m³
               </div>
             </div>
           </section>
@@ -659,17 +649,6 @@ function App() {
               Zemin Katmanları
             </h2>
             <div className="flex items-center gap-4">
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={showT}
-                  onChange={(e) => setShowT(e.target.checked)}
-                  className="rounded"
-                />
-                <span className="text-sm">
-                  T (temel zemin periyodu) hesapla
-                </span>
-              </label>
               <button
                 onClick={addLayer}
                 className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
@@ -848,71 +827,38 @@ function App() {
             {/* Kullanılan H Bilgisi */}
             <div className="mb-4 rounded-md bg-blue-50 p-3">
               <div className="text-sm text-blue-800">
-                <strong>H (M1/M2):</strong> {result.H_M12.toFixed(2)} m
-                {depthMode === "VS30" && " (Vs30 hedefi: 30 m)"}
-                {depthMode === "SITE_HS" && " (tüm profil)"}
-                {depthMode === "CUSTOM" && ` (özel hedef: ${customDepth} m)`}
-              </div>
-              <div className="text-sm text-blue-800">
-                <strong>H (M3):</strong> {result.H_M3.toFixed(2)} m
-              </div>
-              <div className="mt-2 text-xs text-blue-600">
-                <strong>Hesaplama Detayı:</strong> M1/M2: tam profil, M3:{" "}
-                {targetDepth.toFixed(1)}m derinlik
+                <strong>Toplam Derinlik (H):</strong> {result.H_used.toFixed(2)} m
               </div>
             </div>
 
             {/* VSA Sonuçları */}
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-7">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-4 lg:grid-cols-8">
               <div className="rounded-lg bg-blue-50 p-4">
-                <h3 className="mb-2 font-semibold text-blue-900">M1 Sonucu</h3>
+                <h3 className="mb-2 font-semibold text-blue-900">M1</h3>
                 <div className="text-2xl font-bold text-blue-700">
                   {result.Vsa_M1.toFixed(1)} m/s
                 </div>
-                {showT && result.T_M1 && (
-                  <div className="mt-2 text-sm text-blue-600">
-                    T: {result.T_M1.toFixed(3)} s
-                  </div>
-                )}
               </div>
 
               <div className="rounded-lg bg-green-50 p-4">
-                <h3 className="mb-2 font-semibold text-green-900">M2 Sonucu</h3>
+                <h3 className="mb-2 font-semibold text-green-900">M2</h3>
                 <div className="text-2xl font-bold text-green-700">
                   {result.Vsa_M2.toFixed(1)} m/s
                 </div>
-                {showT && result.T_M2 && (
-                  <div className="mt-2 text-sm text-green-600">
-                    T: {result.T_M2.toFixed(3)} s
-                  </div>
-                )}
               </div>
 
               <div className="rounded-lg bg-purple-50 p-4">
                 <h3 className="mb-2 font-semibold text-purple-900">
-                  M3 Sonucu
+                  M3 (MOC)
                 </h3>
                 <div className="text-2xl font-bold text-purple-700">
                   {result.Vsa_M3.toFixed(1)} m/s
-                </div>
-                {showT && result.T_M3 && (
-                  <div className="mt-2 text-sm text-purple-600">
-                    T: {result.T_M3.toFixed(3)} s
-                  </div>
-                )}
-                <div className="mt-1 text-xs text-purple-600">
-                  Yöntem:{" "}
-                  {excelMeasurements.length > 0 &&
-                  currentMeasurementIndex !== null
-                    ? excelMeasurements[currentMeasurementIndex]?.method ||
-                      "EXACT"
-                    : "EXACT"}
                 </div>
               </div>
 
               <div className="rounded-lg bg-orange-50 p-4">
                 <h3 className="mb-2 font-semibold text-orange-900">
-                  M4 Sonucu
+                  M4
                 </h3>
                 <div className="text-2xl font-bold text-orange-700">
                   {result.Vsa_M4.toFixed(1)} m/s
@@ -920,7 +866,7 @@ function App() {
               </div>
 
               <div className="rounded-lg bg-red-50 p-4">
-                <h3 className="mb-2 font-semibold text-red-900">M5 Sonucu</h3>
+                <h3 className="mb-2 font-semibold text-red-900">M5</h3>
                 <div className="text-2xl font-bold text-red-700">
                   {result.Vsa_M5?.toFixed(1) || "—"} m/s
                 </div>
@@ -928,7 +874,7 @@ function App() {
 
               <div className="rounded-lg bg-indigo-50 p-4">
                 <h3 className="mb-2 font-semibold text-indigo-900">
-                  M6 Sonucu
+                  M6
                 </h3>
                 <div className="text-2xl font-bold text-indigo-700">
                   {result.Vsa_M6?.toFixed(1) || "—"} m/s
@@ -936,9 +882,16 @@ function App() {
               </div>
 
               <div className="rounded-lg bg-teal-50 p-4">
-                <h3 className="mb-2 font-semibold text-teal-900">M7 Sonucu</h3>
+                <h3 className="mb-2 font-semibold text-teal-900">M7</h3>
                 <div className="text-2xl font-bold text-teal-700">
                   {result.Vsa_M7?.toFixed(1) || "—"} m/s
+                </div>
+              </div>
+
+              <div className="rounded-lg bg-pink-50 p-4">
+                <h3 className="mb-2 font-semibold text-pink-900">Exact</h3>
+                <div className="text-2xl font-bold text-pink-700">
+                  {result.Vsa_Exact?.toFixed(1) || "—"} m/s
                 </div>
               </div>
             </div>
@@ -951,7 +904,7 @@ function App() {
                 </h3>
 
                 {/* Beklenen Çıktılar */}
-                <div className="mb-3 grid grid-cols-1 gap-2 text-sm md:grid-cols-7">
+                <div className="mb-3 grid grid-cols-1 gap-2 text-sm md:grid-cols-4 lg:grid-cols-8">
                   <div>
                     <strong>M1:</strong> {currentPreset.expected.Vsa_M1} m/s
                   </div>
@@ -977,6 +930,10 @@ function App() {
                     <strong>M7:</strong> {currentPreset.expected.Vsa_M7 || "—"}{" "}
                     m/s
                   </div>
+                  <div>
+                    <strong>Exact:</strong> {currentPreset.expected.Exact || "—"}{" "}
+                    m/s
+                  </div>
                 </div>
 
                 {/* Sapma Yüzdeleri */}
@@ -986,17 +943,20 @@ function App() {
                     <li>M1: %{deviationAnalysis.deviations.M1.toFixed(1)}</li>
                     <li>M2: %{deviationAnalysis.deviations.M2.toFixed(1)}</li>
                     <li>M3: %{deviationAnalysis.deviations.M3.toFixed(1)}</li>
-                    {deviationAnalysis.deviations.M4 && (
+                    {deviationAnalysis.deviations.M4 !== undefined && (
                       <li>M4: %{deviationAnalysis.deviations.M4.toFixed(1)}</li>
                     )}
-                    {deviationAnalysis.deviations.M5 && (
+                    {deviationAnalysis.deviations.M5 !== undefined && (
                       <li>M5: %{deviationAnalysis.deviations.M5.toFixed(1)}</li>
                     )}
-                    {deviationAnalysis.deviations.M6 && (
+                    {deviationAnalysis.deviations.M6 !== undefined && (
                       <li>M6: %{deviationAnalysis.deviations.M6.toFixed(1)}</li>
                     )}
-                    {deviationAnalysis.deviations.M7 && (
+                    {deviationAnalysis.deviations.M7 !== undefined && (
                       <li>M7: %{deviationAnalysis.deviations.M7.toFixed(1)}</li>
+                    )}
+                    {deviationAnalysis.deviations.Exact !== undefined && (
+                      <li>Exact: %{deviationAnalysis.deviations.Exact.toFixed(1)}</li>
                     )}
                   </ul>
                 </div>
