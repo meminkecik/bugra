@@ -8,10 +8,10 @@ export type Layer = {
 };
 
 export type Result = {
-  H_used: number;    // Hesaplamada kullanılan toplam derinlik
+  H_used: number; // Hesaplamada kullanılan toplam derinlik
   Vsa_M1: number;
   Vsa_M2: number;
-  Vsa_M3: number;    // Meksika Kodu (MOC)
+  Vsa_M3: number; // Meksika Kodu (MOC)
   Vsa_M4: number;
   Vsa_M5: number | null;
   Vsa_M6: number | null;
@@ -194,9 +194,9 @@ export function computeTM3_MOC(
     // Makale Tablo 1'deki formülde  ve Meksika yönetmeliği uygulamasında
     // integralden gelen 1/3 çarpanı bu toplamın içinde yer almaz.
     // Önceki kodda: ... / 3 vardı. Bunu kaldırıyoruz.
-    
+
     sum_rho_d_w2 += rho * d * (wt * wt + wt * wb + wb * wb);
-    
+
     // --- DÜZELTME BİTİŞİ ---
   }
   if (!(sum_rho_d_w2 > 0)) return null;
@@ -401,7 +401,7 @@ export function computeTM7_PROPOSED(
     const Li = bottomUp[i];
     if (typeof Li.d !== "number" || Li.d <= 0) return null;
     if (typeof Li.vs !== "number" || Li.vs <= 0) return null;
-    
+
     // Rho kontrolü
     const rhoVal = normalizeRho(
       typeof Li.rho === "number" ? Li.rho : defaultRhoKgPerM3
@@ -430,7 +430,7 @@ export function computeTM7_PROPOSED(
   if (!(sum_term > 0)) return null;
 
   const k = n === 1 && useSingleLayerConstant ? 4 * Math.sqrt(2) : 5.515;
-  
+
   // Makale Örnek 310 ile uyumlu: Karekök toplamın dışında.
   return k * Math.sqrt(sum_term);
 }
@@ -458,7 +458,7 @@ export function computeT(H: number, Vsa: number | null): number | null {
  *  - "MOC": T_s = 4 * sqrt( (Σ d/G) * (Σ ρ d avg(w^2)) )
  *  - "RAYLEIGH": T = 2π * sqrt( Σ m_i δ_i² / Σ f_i δ_i )
  *  - "EXACT": Transfer Matrix Method ile tam doğal periyot hesabı
- * 
+ *
  * @param targetDepthM12 - M1, M2, M4, M5 için hedef derinlik (varsayılan: tüm profil)
  * @param targetDepthM3 - M3, M6, M7, Exact için hedef derinlik (varsayılan: 30m)
  */
@@ -467,23 +467,22 @@ export function computeResults(
   defaultRho: number = 1900,
   targetDepthM12: number = Number.POSITIVE_INFINITY, // M1, M2, M4, M5 için
   targetDepthM3: number = Number.POSITIVE_INFINITY, // M3, M6, M7 için (varsayılan: tüm profil)
-  m3DepthMode: "TOTAL" | "TARGET" = "TOTAL", 
+  m3DepthMode: "TOTAL" | "TARGET" = "TOTAL",
   m3Formula: "MOC" | "RAYLEIGH" | "EXACT" = "MOC"
 ): Result | null {
-
   // 1. Grup: M1, M2, M4, M5 (Geometrik Metodlar)
   const Ls12 = isFinite(targetDepthM12)
     ? trimLayersToDepth(layersSurfaceDown, targetDepthM12)
     : layersSurfaceDown;
-    
+
   if (!Ls12.length) return null;
 
   // 2. Grup: M3, M6, M7, Exact (Kütle/Transfer Metodları)
   let Ls3: Layer[], H3: number;
-  
+
   if (m3DepthMode === "TOTAL") {
     // "TOTAL" modunda: targetDepth ne olursa olsun, eldeki tüm katmanları kullan
-    Ls3 = layersSurfaceDown; 
+    Ls3 = layersSurfaceDown;
     H3 = computeProfileDepth(layersSurfaceDown);
   } else {
     // "TARGET" modunda: Verilen targetDepthM3'e (örn: 30m) kadar kes
@@ -504,16 +503,22 @@ export function computeResults(
   const Vsa_M7 = computeVsaM7(Ls3, defaultRho);
 
   if (
-    Vsa_M1 == null || Vsa_M2 == null || Vsa_M4 == null || 
-    Vsa_M5 == null || Vsa_M6 == null || Vsa_M7 == null
-  ) return null;
+    Vsa_M1 == null ||
+    Vsa_M2 == null ||
+    Vsa_M4 == null ||
+    Vsa_M5 == null ||
+    Vsa_M6 == null ||
+    Vsa_M7 == null
+  )
+    return null;
 
   // --- M3 (Meksika Kodu - MOC veya seçilen formül) ---
-  const T_M3 = m3Formula === "MOC"
-    ? computeTM3_MOC(Ls3, defaultRho)
-    : m3Formula === "RAYLEIGH"
-    ? computeTM3_RAYLEIGH(Ls3, defaultRho)
-    : computeTM3_EXACT(Ls3, defaultRho);
+  const T_M3 =
+    m3Formula === "MOC"
+      ? computeTM3_MOC(Ls3, defaultRho)
+      : m3Formula === "RAYLEIGH"
+      ? computeTM3_RAYLEIGH(Ls3, defaultRho)
+      : computeTM3_EXACT(Ls3, defaultRho);
   const Vsa_M3 = computeVsaFromT(H3, T_M3);
 
   // --- Exact (Transfer Matrix) ---

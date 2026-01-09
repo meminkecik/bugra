@@ -1000,8 +1000,13 @@ export function exportToExcel(
         { wch: 12 }, // Ek sütun
       ];
       // Sayfa adı: Şehir_İlçe_İstasyon_Yöntem (benzersiz)
-      const methodTag = (measurement.method || "").toString().trim().toUpperCase();
-      const baseSheetName = `${location.sehir}_${location.ilce}_${location.istasyon}${methodTag ? `_${methodTag}` : ""}`;
+      const methodTag = (measurement.method || "")
+        .toString()
+        .trim()
+        .toUpperCase();
+      const baseSheetName = `${location.sehir}_${location.ilce}_${
+        location.istasyon
+      }${methodTag ? `_${methodTag}` : ""}`;
       const uniqueSheetName = getUniqueSheetName(baseSheetName);
       XLSX.utils.book_append_sheet(wb, detailWs, uniqueSheetName);
     }

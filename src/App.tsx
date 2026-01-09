@@ -75,8 +75,8 @@ function App() {
     return computeResults(
       layers,
       defaultRho,
-      targetDepth,  // M1, M2, M4, M5 için derinlik
-      targetDepth,  // M3, M6, M7 için hedef derinlik
+      targetDepth, // M1, M2, M4, M5 için derinlik
+      targetDepth, // M3, M6, M7 için hedef derinlik
       m3Mode as "TOTAL" | "TARGET",
       "MOC"
     );
@@ -90,58 +90,88 @@ function App() {
     }
   }, [result, currentPreset]);
 
-// Basit sapma analizi fonksiyonu
-function analyzeDeviationsSimple(
-  result: Result,
-  expected: {
-    Vsa_M1: number;
-    Vsa_M2: number;
-    Vsa_M3: number;
-    Vsa_M4?: number;
-    Vsa_M5?: number;
-    Vsa_M6?: number;
-    Vsa_M7?: number;
-    Exact?: number;
+  // Basit sapma analizi fonksiyonu
+  function analyzeDeviationsSimple(
+    result: Result,
+    expected: {
+      Vsa_M1: number;
+      Vsa_M2: number;
+      Vsa_M3: number;
+      Vsa_M4?: number;
+      Vsa_M5?: number;
+      Vsa_M6?: number;
+      Vsa_M7?: number;
+      Exact?: number;
+    }
+  ): {
+    deviations: {
+      M1: number;
+      M2: number;
+      M3: number;
+      M4?: number;
+      M5?: number;
+      M6?: number;
+      M7?: number;
+      Exact?: number;
+    };
+    highDeviations: string[];
+    needsNarrowing: boolean;
+  } {
+    const calcDev = (calc: number, exp: number) =>
+      Math.abs((calc - exp) / exp) * 100;
+    const isHigh = (calc: number, exp: number) => calcDev(calc, exp) > 5;
+
+    const deviations = {
+      M1: calcDev(result.Vsa_M1, expected.Vsa_M1),
+      M2: calcDev(result.Vsa_M2, expected.Vsa_M2),
+      M3: calcDev(result.Vsa_M3, expected.Vsa_M3),
+      ...(expected.Vsa_M4 && { M4: calcDev(result.Vsa_M4, expected.Vsa_M4) }),
+      ...(expected.Vsa_M5 &&
+        result.Vsa_M5 && { M5: calcDev(result.Vsa_M5, expected.Vsa_M5) }),
+      ...(expected.Vsa_M6 &&
+        result.Vsa_M6 && { M6: calcDev(result.Vsa_M6, expected.Vsa_M6) }),
+      ...(expected.Vsa_M7 &&
+        result.Vsa_M7 && { M7: calcDev(result.Vsa_M7, expected.Vsa_M7) }),
+      ...(expected.Exact &&
+        result.Vsa_Exact && {
+          Exact: calcDev(result.Vsa_Exact, expected.Exact),
+        }),
+    };
+
+    const highDeviations: string[] = [];
+    if (isHigh(result.Vsa_M1, expected.Vsa_M1))
+      highDeviations.push(`M1: %${deviations.M1.toFixed(1)}`);
+    if (isHigh(result.Vsa_M2, expected.Vsa_M2))
+      highDeviations.push(`M2: %${deviations.M2.toFixed(1)}`);
+    if (isHigh(result.Vsa_M3, expected.Vsa_M3))
+      highDeviations.push(`M3: %${deviations.M3.toFixed(1)}`);
+    if (expected.Vsa_M4 && isHigh(result.Vsa_M4, expected.Vsa_M4))
+      highDeviations.push(`M4: %${deviations.M4!.toFixed(1)}`);
+    if (
+      expected.Vsa_M5 &&
+      result.Vsa_M5 &&
+      isHigh(result.Vsa_M5, expected.Vsa_M5)
+    )
+      highDeviations.push(`M5: %${deviations.M5!.toFixed(1)}`);
+    if (
+      expected.Vsa_M6 &&
+      result.Vsa_M6 &&
+      isHigh(result.Vsa_M6, expected.Vsa_M6)
+    )
+      highDeviations.push(`M6: %${deviations.M6!.toFixed(1)}`);
+    if (
+      expected.Vsa_M7 &&
+      result.Vsa_M7 &&
+      isHigh(result.Vsa_M7, expected.Vsa_M7)
+    )
+      highDeviations.push(`M7: %${deviations.M7!.toFixed(1)}`);
+
+    return {
+      deviations,
+      highDeviations,
+      needsNarrowing: highDeviations.length > 0,
+    };
   }
-): {
-  deviations: {
-    M1: number;
-    M2: number;
-    M3: number;
-    M4?: number;
-    M5?: number;
-    M6?: number;
-    M7?: number;
-    Exact?: number;
-  };
-  highDeviations: string[];
-  needsNarrowing: boolean;
-} {
-  const calcDev = (calc: number, exp: number) => Math.abs((calc - exp) / exp) * 100;
-  const isHigh = (calc: number, exp: number) => calcDev(calc, exp) > 5;
-
-  const deviations = {
-    M1: calcDev(result.Vsa_M1, expected.Vsa_M1),
-    M2: calcDev(result.Vsa_M2, expected.Vsa_M2),
-    M3: calcDev(result.Vsa_M3, expected.Vsa_M3),
-    ...(expected.Vsa_M4 && { M4: calcDev(result.Vsa_M4, expected.Vsa_M4) }),
-    ...(expected.Vsa_M5 && result.Vsa_M5 && { M5: calcDev(result.Vsa_M5, expected.Vsa_M5) }),
-    ...(expected.Vsa_M6 && result.Vsa_M6 && { M6: calcDev(result.Vsa_M6, expected.Vsa_M6) }),
-    ...(expected.Vsa_M7 && result.Vsa_M7 && { M7: calcDev(result.Vsa_M7, expected.Vsa_M7) }),
-    ...(expected.Exact && result.Vsa_Exact && { Exact: calcDev(result.Vsa_Exact, expected.Exact) }),
-  };
-
-  const highDeviations: string[] = [];
-  if (isHigh(result.Vsa_M1, expected.Vsa_M1)) highDeviations.push(`M1: %${deviations.M1.toFixed(1)}`);
-  if (isHigh(result.Vsa_M2, expected.Vsa_M2)) highDeviations.push(`M2: %${deviations.M2.toFixed(1)}`);
-  if (isHigh(result.Vsa_M3, expected.Vsa_M3)) highDeviations.push(`M3: %${deviations.M3.toFixed(1)}`);
-  if (expected.Vsa_M4 && isHigh(result.Vsa_M4, expected.Vsa_M4)) highDeviations.push(`M4: %${deviations.M4!.toFixed(1)}`);
-  if (expected.Vsa_M5 && result.Vsa_M5 && isHigh(result.Vsa_M5, expected.Vsa_M5)) highDeviations.push(`M5: %${deviations.M5!.toFixed(1)}`);
-  if (expected.Vsa_M6 && result.Vsa_M6 && isHigh(result.Vsa_M6, expected.Vsa_M6)) highDeviations.push(`M6: %${deviations.M6!.toFixed(1)}`);
-  if (expected.Vsa_M7 && result.Vsa_M7 && isHigh(result.Vsa_M7, expected.Vsa_M7)) highDeviations.push(`M7: %${deviations.M7!.toFixed(1)}`);
-
-  return { deviations, highDeviations, needsNarrowing: highDeviations.length > 0 };
-}
 
   // Hataları hesapla
   const errors = useMemo(() => {
@@ -275,7 +305,9 @@ function analyzeDeviationsSimple(
       expected: currentPreset.expected,
     };
 
-    const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify(report, null, 2)], {
+      type: "application/json",
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -400,22 +432,24 @@ function analyzeDeviationsSimple(
       const vs30Result = computeResults(
         tempLayers,
         defaultRho,
-        30,   // M1, M2, M4, M5 için 30m
-        30,   // M3, M6, M7 için 30m
+        30, // M1, M2, M4, M5 için 30m
+        30, // M3, M6, M7 için 30m
         "TARGET",
         "MOC"
       );
-      vs30Results.push(vs30Result || {
-        H_used: 0,
-        Vsa_M1: 0,
-        Vsa_M2: 0,
-        Vsa_M3: 0,
-        Vsa_M4: 0,
-        Vsa_M5: null,
-        Vsa_M6: null,
-        Vsa_M7: null,
-        Vsa_Exact: null,
-      });
+      vs30Results.push(
+        vs30Result || {
+          H_used: 0,
+          Vsa_M1: 0,
+          Vsa_M2: 0,
+          Vsa_M3: 0,
+          Vsa_M4: 0,
+          Vsa_M5: null,
+          Vsa_M6: null,
+          Vsa_M7: null,
+          Vsa_Exact: null,
+        }
+      );
     }
 
     exportToExcel(
@@ -601,8 +635,8 @@ function analyzeDeviationsSimple(
                 {result?.H_used.toFixed(1) || "—"} m
               </div>
               <div>
-                <strong>Varsayılan Yoğunluk:</strong>{" "}
-                {currentPreset.defaultRho} kg/m³
+                <strong>Varsayılan Yoğunluk:</strong> {currentPreset.defaultRho}{" "}
+                kg/m³
               </div>
             </div>
           </section>
@@ -827,7 +861,8 @@ function analyzeDeviationsSimple(
             {/* Kullanılan H Bilgisi */}
             <div className="mb-4 rounded-md bg-blue-50 p-3">
               <div className="text-sm text-blue-800">
-                <strong>Toplam Derinlik (H):</strong> {result.H_used.toFixed(2)} m
+                <strong>Toplam Derinlik (H):</strong> {result.H_used.toFixed(2)}{" "}
+                m
               </div>
             </div>
 
@@ -848,18 +883,14 @@ function analyzeDeviationsSimple(
               </div>
 
               <div className="rounded-lg bg-purple-50 p-4">
-                <h3 className="mb-2 font-semibold text-purple-900">
-                  M3 (MOC)
-                </h3>
+                <h3 className="mb-2 font-semibold text-purple-900">M3 (MOC)</h3>
                 <div className="text-2xl font-bold text-purple-700">
                   {result.Vsa_M3.toFixed(1)} m/s
                 </div>
               </div>
 
               <div className="rounded-lg bg-orange-50 p-4">
-                <h3 className="mb-2 font-semibold text-orange-900">
-                  M4
-                </h3>
+                <h3 className="mb-2 font-semibold text-orange-900">M4</h3>
                 <div className="text-2xl font-bold text-orange-700">
                   {result.Vsa_M4.toFixed(1)} m/s
                 </div>
@@ -873,9 +904,7 @@ function analyzeDeviationsSimple(
               </div>
 
               <div className="rounded-lg bg-indigo-50 p-4">
-                <h3 className="mb-2 font-semibold text-indigo-900">
-                  M6
-                </h3>
+                <h3 className="mb-2 font-semibold text-indigo-900">M6</h3>
                 <div className="text-2xl font-bold text-indigo-700">
                   {result.Vsa_M6?.toFixed(1) || "—"} m/s
                 </div>
@@ -931,8 +960,8 @@ function analyzeDeviationsSimple(
                     m/s
                   </div>
                   <div>
-                    <strong>Exact:</strong> {currentPreset.expected.Exact || "—"}{" "}
-                    m/s
+                    <strong>Exact:</strong>{" "}
+                    {currentPreset.expected.Exact || "—"} m/s
                   </div>
                 </div>
 
@@ -956,7 +985,9 @@ function analyzeDeviationsSimple(
                       <li>M7: %{deviationAnalysis.deviations.M7.toFixed(1)}</li>
                     )}
                     {deviationAnalysis.deviations.Exact !== undefined && (
-                      <li>Exact: %{deviationAnalysis.deviations.Exact.toFixed(1)}</li>
+                      <li>
+                        Exact: %{deviationAnalysis.deviations.Exact.toFixed(1)}
+                      </li>
                     )}
                   </ul>
                 </div>
