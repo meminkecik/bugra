@@ -705,6 +705,13 @@ function App() {
                 className="ml-2 w-24 rounded border border-gray-300 px-2 py-1"
               />
             </label>
+            <div className="mt-1 text-xs text-gray-500">
+              Not: ρ yalnızca M3/M6/M7/Exact hesaplarında ve{" "}
+              <strong>katmanlar arasında farklı ρ değerleri</strong> olduğunda
+              etkisini gösterir. Tüm katmanlarda aynı ρ kullanılırsa (ör. sadece
+              varsayılan ρ ile) birçok formülde ρ ölçeği sadeleştiği için
+              sonuçlar değişmeyebilir.
+            </div>
           </div>
 
           {/* Örnek Profil Seçimi */}
