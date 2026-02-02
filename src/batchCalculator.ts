@@ -15,8 +15,7 @@ export type BatchResult = {
     M7: number;
     Exact: number;
   };
-  // Expected değerlerini sadece "Total Depth" modunda karşılaştırmak anlamlıdır
-  // çünkü makaledeki beklenen değerler tam profil içindir.
+  // Beklenen değerler (Makale verileriyle karşılaştırma için)
   expected?: {
     M1: number;
     M2: number;
@@ -27,6 +26,7 @@ export type BatchResult = {
     M7?: number;
     Exact?: number;
   };
+  // Fark analizi
   diff?: {
     M1: string;
     M2: string;
@@ -40,6 +40,7 @@ export type BatchResult = {
 };
 
 /**
+ * Toplu Hesaplama Fonksiyonu
  * @param targetDepth - Eğer sayı verilirse (örn: 30), hesaplamalar o derinlik için yapılır.
  * Eğer undefined/null verilirse, tüm profil derinliği kullanılır (Makale Modu).
  */
@@ -50,19 +51,19 @@ export function calculateAllPresets(targetDepth?: number): {
   const isCustomDepth = typeof targetDepth === "number" && targetDepth > 0;
 
   for (const preset of PRESETS) {
-    // Eğer özel derinlik varsa onu kullan, yoksa sonsuz (tüm profil)
+    // Derinlik Modu Ayarları
     const depthToUse = isCustomDepth ? targetDepth : Number.POSITIVE_INFINITY;
-
-    // M3, M6, M7 için mod seçimi: Özel derinlik varsa "TARGET", yoksa "TOTAL"
     const m3Mode = isCustomDepth ? "TARGET" : "TOTAL";
 
+    // Hesaplama
+    // Exact metodu artık "Modified Finite Element Transfer Matrix Method" (Eq 25) kullanır.
     const result = computeResults(
       preset.layers,
       preset.defaultRho || 1900,
-      depthToUse, // M1, M2, M4, M5 için derinlik
-      depthToUse, // M3, M6, M7 için hedef derinlik
-      m3Mode, // Mod seçimi
-      "MOC" // Formül tipi
+      depthToUse, 
+      depthToUse, 
+      m3Mode, 
+      "MOC" // M3 sütunu için standart Meksika formülü
     );
 
     if (result) {
@@ -77,7 +78,7 @@ export function calculateAllPresets(targetDepth?: number): {
         Exact: result.Vsa_Exact ?? 0,
       };
 
-      // Beklenen değerleri sadece "Tam Profil" modundaysak ve preset'te varsa ekle
+      // Beklenen değerleri preset'ten al (Sadece tam profil modunda)
       const exp = !isCustomDepth ? preset.expected : undefined;
 
       const batchResult: BatchResult = {
@@ -86,7 +87,7 @@ export function calculateAllPresets(targetDepth?: number): {
         Vsa: resVsa,
       };
 
-      // Eğer karşılaştırma yapılacaksa (Makale modu)
+      // Fark Hesaplama
       if (exp) {
         batchResult.expected = {
           M1: exp.Vsa_M1,
@@ -118,6 +119,7 @@ export function calculateAllPresets(targetDepth?: number): {
 
 function formatDiff(calc: number, exp: number | undefined): string {
   if (exp === undefined) return "-";
+  // Yüzdelik sapma: (Hesaplanan - Beklenen) / Beklenen
   const d = ((calc - exp) / exp) * 100;
   return `${d > 0 ? "+" : ""}${d.toFixed(1)}%`;
 }
@@ -131,9 +133,9 @@ export function printTable(data: { results: BatchResult[] }) {
       "M3".padEnd(8) +
       "M7".padEnd(8) +
       "Exact".padEnd(8) +
-      (data.results[0]?.diff ? "Diff(M7)" : "")
+      (data.results[0]?.diff ? "Diff(Exact)" : "")
   );
-  console.log("-".repeat(80));
+  console.log("-".repeat(95));
 
   data.results.forEach((r) => {
     let line =
@@ -146,7 +148,8 @@ export function printTable(data: { results: BatchResult[] }) {
       r.Vsa.Exact.toFixed(1).padEnd(8);
 
     if (r.diff) {
-      line += ` (${r.diff.M7})`;
+      // Exact metodun sapması (Kodun doğruluğunu kontrol için 0'a yakın olmalı)
+      line += ` (Ex:${r.diff.Exact})`;
     }
 
     console.log(line);
