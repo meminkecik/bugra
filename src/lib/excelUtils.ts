@@ -54,11 +54,11 @@ export function readExcelFile(file: File): Promise<ExcelData> {
           }) as unknown[][];
 
           console.log(
-            `   📊 Sayfa ${sheetName} - Toplam satır sayısı: ${jsonData.length}`
+            `   📊 Sayfa ${sheetName} - Toplam satır sayısı: ${jsonData.length}`,
           );
           if (jsonData.length < 2) {
             console.log(
-              `   ⚠️  Sayfa ${sheetName} atlandı - Yetersiz veri (${jsonData.length} satır)`
+              `   ⚠️  Sayfa ${sheetName} atlandı - Yetersiz veri (${jsonData.length} satır)`,
             );
             return;
           }
@@ -195,7 +195,7 @@ export function readExcelFile(file: File): Promise<ExcelData> {
           // Header bulunduysa klasik yaklaşımı kullan
           if (headerFound && headerRowIndex !== -1) {
             console.log(
-              `   ✅ Header bulundu: satır ${headerRowIndex}, sütunlar: name=${nameColIndex}, method=${methodColIndex}, depthStart=${depthStartColIndex}, depthEnd=${depthEndColIndex}, vs=${vsColIndex}`
+              `   ✅ Header bulundu: satır ${headerRowIndex}, sütunlar: name=${nameColIndex}, method=${methodColIndex}, depthStart=${depthStartColIndex}, depthEnd=${depthEndColIndex}, vs=${vsColIndex}`,
             );
 
             // YENİ YAKLAŞIM: Her satırı ayrı ayrı kontrol et, potansiyel ölçüm kombinasyonlarını ara
@@ -247,7 +247,7 @@ export function readExcelFile(file: File): Promise<ExcelData> {
                     m.name === cleanName &&
                     m.method === cleanMethod &&
                     m.city === cleanCity &&
-                    m.district === cleanDistrict
+                    m.district === cleanDistrict,
                 );
 
                 if (!existingCombination) {
@@ -259,20 +259,20 @@ export function readExcelFile(file: File): Promise<ExcelData> {
                     rowIndex: dataRowIndex,
                   });
                   console.log(
-                    `   🔍 Potansiyel ölçüm bulundu: ${cleanCity} - ${cleanDistrict} - "${cleanName}" - Yöntem: "${cleanMethod}"`
+                    `   🔍 Potansiyel ölçüm bulundu: ${cleanCity} - ${cleanDistrict} - "${cleanName}" - Yöntem: "${cleanMethod}"`,
                   );
                 }
               }
             }
 
             console.log(
-              `   📋 ${allPotentialMeasurements.length} potansiyel ölçüm kombinasyonu bulundu`
+              `   📋 ${allPotentialMeasurements.length} potansiyel ölçüm kombinasyonu bulundu`,
             );
 
             // Fallback: Çok az kombinasyon bulunduysa (ör. 0-1) sırayla gruplayarak ölçüm çıkar
             if (allPotentialMeasurements.length <= 1) {
               console.log(
-                "   ℹ️ Potansiyel kombinasyon sayısı yetersiz, sıralı gruplama parser'ı kullanılıyor"
+                "   ℹ️ Potansiyel kombinasyon sayısı yetersiz, sıralı gruplama parser'ı kullanılıyor",
               );
               let currentName = "";
               let currentMethod = "MOC";
@@ -303,7 +303,7 @@ export function readExcelFile(file: File): Promise<ExcelData> {
                 });
                 measurements_found_this_sheet++;
                 console.log(
-                  `   ✅ (Seq) Ölçüm kaydedildi: "${safeDisplayName}" - ${currentLayers.length} katman - Yöntem: ${currentMethod}`
+                  `   ✅ (Seq) Ölçüm kaydedildi: "${safeDisplayName}" - ${currentLayers.length} katman - Yöntem: ${currentMethod}`,
                 );
                 currentLayers = [];
                 layerIdCounter = 1;
@@ -510,11 +510,11 @@ export function readExcelFile(file: File): Promise<ExcelData> {
                   measurements.push(measurement);
                   measurements_found_this_sheet++;
                   console.log(
-                    `   ✅ Ölçüm kaydedildi: "${potentialMeasurement.name}" - ${layers.length} katman - Yöntem: ${potentialMeasurement.method}`
+                    `   ✅ Ölçüm kaydedildi: "${potentialMeasurement.name}" - ${layers.length} katman - Yöntem: ${potentialMeasurement.method}`,
                   );
                 } else {
                   console.log(
-                    `   ❌ Ölçüm atlandı (katman yok): "${potentialMeasurement.name}" - Yöntem: ${potentialMeasurement.method}`
+                    `   ❌ Ölçüm atlandı (katman yok): "${potentialMeasurement.name}" - Yöntem: ${potentialMeasurement.method}`,
                   );
                 }
               }
@@ -522,7 +522,7 @@ export function readExcelFile(file: File): Promise<ExcelData> {
           } else {
             // Header bulunamadı, alternatif yaklaşım: Her satırı kontrol et
             console.log(
-              `   ❌ Header bulunamadı, alternatif yaklaşım deneniyor: ${sheetName}`
+              `   ❌ Header bulunamadı, alternatif yaklaşım deneniyor: ${sheetName}`,
             );
 
             // Birleştirilmiş.xlsx formatını da dene (eski format)
@@ -531,7 +531,7 @@ export function readExcelFile(file: File): Promise<ExcelData> {
               if (
                 !row.some(
                   (cell) =>
-                    typeof cell === "string" && cell.includes("İSTASYON KODU")
+                    typeof cell === "string" && cell.includes("İSTASYON KODU"),
                 )
               ) {
                 continue;
@@ -621,7 +621,7 @@ export function readExcelFile(file: File): Promise<ExcelData> {
           }
 
           console.log(
-            `${sheetName} sayfasında ${measurements_found_this_sheet} ölçüm bulundu`
+            `${sheetName} sayfasında ${measurements_found_this_sheet} ölçüm bulundu`,
           );
         });
 
@@ -640,7 +640,7 @@ export function readExcelFile(file: File): Promise<ExcelData> {
       } catch (error) {
         console.error("Excel dosyası okunurken hata oluştu:", error);
         reject(
-          new Error("Excel dosyası okunamadı: " + (error as Error).message)
+          new Error("Excel dosyası okunamadı: " + (error as Error).message),
         );
       }
     };
@@ -662,7 +662,7 @@ export function exportToExcel(
   vs30Results: Result[],
   defaultRho: number,
   targetDepth: number,
-  depthMode: string
+  depthMode: string,
 ): void {
   // Şehir ve ilçe bilgilerini parse et
   const parseLocationInfo = (measurementName: string) => {
@@ -705,7 +705,7 @@ export function exportToExcel(
     ],
     ...results.map((result, index) => {
       const location = parseLocationInfo(
-        measurements[index]?.name || `Ölçüm ${index + 1}`
+        measurements[index]?.name || `Ölçüm ${index + 1}`,
       );
       const measurement = measurements[index];
       const totalDepth =
@@ -789,7 +789,7 @@ export function exportToExcel(
 
   results.forEach((result, index) => {
     const location = parseLocationInfo(
-      measurements[index]?.name || `Ölçüm ${index + 1}`
+      measurements[index]?.name || `Ölçüm ${index + 1}`,
     );
     const city = location.sehir;
 
@@ -920,7 +920,7 @@ export function exportToExcel(
           (
             measurement.layers.reduce(
               (sum, layer) => sum + Number(layer.vs),
-              0
+              0,
             ) / measurement.layers.length
           ).toFixed(1),
         ],
@@ -1102,7 +1102,7 @@ export function downloadSampleExcel(): void {
  * Dosya yükleme için input elementi oluşturur.
  */
 export function createFileInput(
-  onFileSelect: (file: File) => void
+  onFileSelect: (file: File) => void,
 ): HTMLInputElement {
   const input = document.createElement("input");
   input.type = "file";

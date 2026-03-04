@@ -78,7 +78,7 @@ function App() {
       targetDepth, // M1, M2, M4, M5 için derinlik
       targetDepth, // M3, M6, M7 için hedef derinlik
       m3Mode as "TOTAL" | "TARGET",
-      "MOC"
+      "MOC",
     );
   }, [layers, defaultRho, targetDepth, m3Mode]);
 
@@ -103,7 +103,7 @@ function App() {
       Vsa_M7?: number;
       Vsa_M8?: number;
       Exact?: number;
-    }
+    },
   ): {
     deviations: {
       M1?: number;
@@ -120,13 +120,16 @@ function App() {
     needsNarrowing: boolean;
   } {
     // Exact değerine göre sapma hesapla (yüzde olarak, + veya - işaretli)
-    const calcDevFromExact = (calc: number | null | undefined, exact: number) => {
+    const calcDevFromExact = (
+      calc: number | null | undefined,
+      exact: number,
+    ) => {
       if (calc == null || exact <= 0) return undefined;
       return ((calc - exact) / exact) * 100;
     };
 
     const exactVal = expected.Exact || null;
-    
+
     // Exact değeri yoksa boş döndür
     if (!exactVal) {
       return {
@@ -150,16 +153,41 @@ function App() {
 
     // %10'dan fazla sapma varsa highDeviations'a ekle
     const highDeviations: string[] = [];
-    const isHigh = (dev: number | undefined) => dev !== undefined && Math.abs(dev) > 10;
-    
-    if (isHigh(deviations.M1)) highDeviations.push(`M1: ${deviations.M1! >= 0 ? '+' : ''}${deviations.M1!.toFixed(1)}%`);
-    if (isHigh(deviations.M2)) highDeviations.push(`M2: ${deviations.M2! >= 0 ? '+' : ''}${deviations.M2!.toFixed(1)}%`);
-    if (isHigh(deviations.M3)) highDeviations.push(`M3: ${deviations.M3! >= 0 ? '+' : ''}${deviations.M3!.toFixed(1)}%`);
-    if (isHigh(deviations.M4)) highDeviations.push(`M4: ${deviations.M4! >= 0 ? '+' : ''}${deviations.M4!.toFixed(1)}%`);
-    if (isHigh(deviations.M5)) highDeviations.push(`M5: ${deviations.M5! >= 0 ? '+' : ''}${deviations.M5!.toFixed(1)}%`);
-    if (isHigh(deviations.M6)) highDeviations.push(`M6: ${deviations.M6! >= 0 ? '+' : ''}${deviations.M6!.toFixed(1)}%`);
-    if (isHigh(deviations.M7)) highDeviations.push(`M7: ${deviations.M7! >= 0 ? '+' : ''}${deviations.M7!.toFixed(1)}%`);
-    if (isHigh(deviations.M8)) highDeviations.push(`M8: ${deviations.M8! >= 0 ? '+' : ''}${deviations.M8!.toFixed(1)}%`);
+    const isHigh = (dev: number | undefined) =>
+      dev !== undefined && Math.abs(dev) > 10;
+
+    if (isHigh(deviations.M1))
+      highDeviations.push(
+        `M1: ${deviations.M1! >= 0 ? "+" : ""}${deviations.M1!.toFixed(1)}%`,
+      );
+    if (isHigh(deviations.M2))
+      highDeviations.push(
+        `M2: ${deviations.M2! >= 0 ? "+" : ""}${deviations.M2!.toFixed(1)}%`,
+      );
+    if (isHigh(deviations.M3))
+      highDeviations.push(
+        `M3: ${deviations.M3! >= 0 ? "+" : ""}${deviations.M3!.toFixed(1)}%`,
+      );
+    if (isHigh(deviations.M4))
+      highDeviations.push(
+        `M4: ${deviations.M4! >= 0 ? "+" : ""}${deviations.M4!.toFixed(1)}%`,
+      );
+    if (isHigh(deviations.M5))
+      highDeviations.push(
+        `M5: ${deviations.M5! >= 0 ? "+" : ""}${deviations.M5!.toFixed(1)}%`,
+      );
+    if (isHigh(deviations.M6))
+      highDeviations.push(
+        `M6: ${deviations.M6! >= 0 ? "+" : ""}${deviations.M6!.toFixed(1)}%`,
+      );
+    if (isHigh(deviations.M7))
+      highDeviations.push(
+        `M7: ${deviations.M7! >= 0 ? "+" : ""}${deviations.M7!.toFixed(1)}%`,
+      );
+    if (isHigh(deviations.M8))
+      highDeviations.push(
+        `M8: ${deviations.M8! >= 0 ? "+" : ""}${deviations.M8!.toFixed(1)}%`,
+      );
 
     return {
       deviations,
@@ -196,12 +224,12 @@ function App() {
   const updateLayer = (
     id: string,
     field: keyof Layer,
-    value: string | number
+    value: string | number,
   ) => {
     setLayers(
       layers.map((layer) =>
-        layer.id === id ? { ...layer, [field]: value } : layer
-      )
+        layer.id === id ? { ...layer, [field]: value } : layer,
+      ),
     );
   };
 
@@ -335,7 +363,7 @@ function App() {
       // Toplam derinliği hesapla ve custom depth olarak ayarla
       const totalDepth = firstMeasurement.layers.reduce(
         (sum, l) => sum + (typeof l.d === "number" ? l.d : 0),
-        0
+        0,
       );
       setCustomDepth(totalDepth);
 
@@ -344,7 +372,7 @@ function App() {
       setDeviationAnalysis(null);
     } catch (error) {
       setExcelError(
-        error instanceof Error ? error.message : "Excel dosyası okunamadı"
+        error instanceof Error ? error.message : "Excel dosyası okunamadı",
       );
     } finally {
       setExcelLoading(false);
@@ -400,7 +428,7 @@ function App() {
         Number.POSITIVE_INFINITY,
         Number.POSITIVE_INFINITY,
         "TOTAL",
-        "MOC"
+        "MOC",
       );
 
       if (tempResult) {
@@ -432,7 +460,7 @@ function App() {
         30, // M1, M2, M4, M5 için 30m
         30, // M3, M6, M7 için 30m
         "TARGET",
-        "MOC"
+        "MOC",
       );
       vs30Results.push(
         vs30Result || {
@@ -446,7 +474,7 @@ function App() {
           Vsa_M7: null,
           Vsa_M8: null,
           Vsa_Exact: null,
-        }
+        },
       );
     }
 
@@ -456,7 +484,7 @@ function App() {
       vs30Results,
       defaultRho,
       targetDepth,
-      depthMode
+      depthMode,
     );
   };
 
@@ -466,7 +494,7 @@ function App() {
       layers.map((layer) => ({
         ...layer,
         rho: layer.rho === "" ? "" : layer.rho,
-      }))
+      })),
     );
   }, [defaultRho]);
 
@@ -796,7 +824,7 @@ function App() {
                           updateLayer(
                             layer.id,
                             "vp",
-                            e.target.value === "" ? "" : Number(e.target.value)
+                            e.target.value === "" ? "" : Number(e.target.value),
                           )
                         }
                         placeholder="Oto"
@@ -815,7 +843,7 @@ function App() {
                           updateLayer(
                             layer.id,
                             "rho",
-                            e.target.value === "" ? "" : Number(e.target.value)
+                            e.target.value === "" ? "" : Number(e.target.value),
                           )
                         }
                         placeholder={defaultRho.toString()}
@@ -968,61 +996,101 @@ function App() {
                 {/* Exact Referans Değeri */}
                 {deviationAnalysis.exactValue && (
                   <div className="mb-3 rounded-md bg-pink-100 p-3">
-                    <strong className="text-pink-900">Referans (Exact): {deviationAnalysis.exactValue} m/s</strong>
-                    <p className="mt-1 text-xs text-pink-700">Tüm sapmalar bu değere göre hesaplanmıştır.</p>
+                    <strong className="text-pink-900">
+                      Referans (Exact): {deviationAnalysis.exactValue} m/s
+                    </strong>
+                    <p className="mt-1 text-xs text-pink-700">
+                      Tüm sapmalar bu değere göre hesaplanmıştır.
+                    </p>
                   </div>
                 )}
 
                 {/* Exact değeri yoksa uyarı */}
                 {!deviationAnalysis.exactValue && (
                   <div className="mb-3 rounded-md bg-gray-100 p-3">
-                    <span className="text-gray-600">Bu preset için Exact referans değeri tanımlanmamış.</span>
+                    <span className="text-gray-600">
+                      Bu preset için Exact referans değeri tanımlanmamış.
+                    </span>
                   </div>
                 )}
 
                 {/* Sapma Yüzdeleri - Exact'e göre */}
                 {deviationAnalysis.exactValue && (
                   <div className="mb-3">
-                    <strong className="text-sm text-yellow-900">Exact'e Göre Sapmalar:</strong>
+                    <strong className="text-sm text-yellow-900">
+                      Exact'e Göre Sapmalar:
+                    </strong>
                     <div className="mt-2 grid grid-cols-2 gap-2 text-sm md:grid-cols-4 lg:grid-cols-8">
                       {deviationAnalysis.deviations.M1 !== undefined && (
-                        <div className={`rounded p-2 ${Math.abs(deviationAnalysis.deviations.M1) <= 10 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                          <strong>M1:</strong> {deviationAnalysis.deviations.M1 >= 0 ? '+' : ''}{deviationAnalysis.deviations.M1.toFixed(1)}%
+                        <div
+                          className={`rounded p-2 ${Math.abs(deviationAnalysis.deviations.M1) <= 10 ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}
+                        >
+                          <strong>M1:</strong>{" "}
+                          {deviationAnalysis.deviations.M1 >= 0 ? "+" : ""}
+                          {deviationAnalysis.deviations.M1.toFixed(1)}%
                         </div>
                       )}
                       {deviationAnalysis.deviations.M2 !== undefined && (
-                        <div className={`rounded p-2 ${Math.abs(deviationAnalysis.deviations.M2) <= 10 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                          <strong>M2:</strong> {deviationAnalysis.deviations.M2 >= 0 ? '+' : ''}{deviationAnalysis.deviations.M2.toFixed(1)}%
+                        <div
+                          className={`rounded p-2 ${Math.abs(deviationAnalysis.deviations.M2) <= 10 ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}
+                        >
+                          <strong>M2:</strong>{" "}
+                          {deviationAnalysis.deviations.M2 >= 0 ? "+" : ""}
+                          {deviationAnalysis.deviations.M2.toFixed(1)}%
                         </div>
                       )}
                       {deviationAnalysis.deviations.M3 !== undefined && (
-                        <div className={`rounded p-2 ${Math.abs(deviationAnalysis.deviations.M3) <= 10 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                          <strong>M3:</strong> {deviationAnalysis.deviations.M3 >= 0 ? '+' : ''}{deviationAnalysis.deviations.M3.toFixed(1)}%
+                        <div
+                          className={`rounded p-2 ${Math.abs(deviationAnalysis.deviations.M3) <= 10 ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}
+                        >
+                          <strong>M3:</strong>{" "}
+                          {deviationAnalysis.deviations.M3 >= 0 ? "+" : ""}
+                          {deviationAnalysis.deviations.M3.toFixed(1)}%
                         </div>
                       )}
                       {deviationAnalysis.deviations.M4 !== undefined && (
-                        <div className={`rounded p-2 ${Math.abs(deviationAnalysis.deviations.M4) <= 10 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                          <strong>M4:</strong> {deviationAnalysis.deviations.M4 >= 0 ? '+' : ''}{deviationAnalysis.deviations.M4.toFixed(1)}%
+                        <div
+                          className={`rounded p-2 ${Math.abs(deviationAnalysis.deviations.M4) <= 10 ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}
+                        >
+                          <strong>M4:</strong>{" "}
+                          {deviationAnalysis.deviations.M4 >= 0 ? "+" : ""}
+                          {deviationAnalysis.deviations.M4.toFixed(1)}%
                         </div>
                       )}
                       {deviationAnalysis.deviations.M5 !== undefined && (
-                        <div className={`rounded p-2 ${Math.abs(deviationAnalysis.deviations.M5) <= 10 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                          <strong>M5:</strong> {deviationAnalysis.deviations.M5 >= 0 ? '+' : ''}{deviationAnalysis.deviations.M5.toFixed(1)}%
+                        <div
+                          className={`rounded p-2 ${Math.abs(deviationAnalysis.deviations.M5) <= 10 ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}
+                        >
+                          <strong>M5:</strong>{" "}
+                          {deviationAnalysis.deviations.M5 >= 0 ? "+" : ""}
+                          {deviationAnalysis.deviations.M5.toFixed(1)}%
                         </div>
                       )}
                       {deviationAnalysis.deviations.M6 !== undefined && (
-                        <div className={`rounded p-2 ${Math.abs(deviationAnalysis.deviations.M6) <= 10 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                          <strong>M6:</strong> {deviationAnalysis.deviations.M6 >= 0 ? '+' : ''}{deviationAnalysis.deviations.M6.toFixed(1)}%
+                        <div
+                          className={`rounded p-2 ${Math.abs(deviationAnalysis.deviations.M6) <= 10 ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}
+                        >
+                          <strong>M6:</strong>{" "}
+                          {deviationAnalysis.deviations.M6 >= 0 ? "+" : ""}
+                          {deviationAnalysis.deviations.M6.toFixed(1)}%
                         </div>
                       )}
                       {deviationAnalysis.deviations.M7 !== undefined && (
-                        <div className={`rounded p-2 ${Math.abs(deviationAnalysis.deviations.M7) <= 10 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                          <strong>M7:</strong> {deviationAnalysis.deviations.M7 >= 0 ? '+' : ''}{deviationAnalysis.deviations.M7.toFixed(1)}%
+                        <div
+                          className={`rounded p-2 ${Math.abs(deviationAnalysis.deviations.M7) <= 10 ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}
+                        >
+                          <strong>M7:</strong>{" "}
+                          {deviationAnalysis.deviations.M7 >= 0 ? "+" : ""}
+                          {deviationAnalysis.deviations.M7.toFixed(1)}%
                         </div>
                       )}
                       {deviationAnalysis.deviations.M8 !== undefined && (
-                        <div className={`rounded p-2 ${Math.abs(deviationAnalysis.deviations.M8) <= 10 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                          <strong>M8:</strong> {deviationAnalysis.deviations.M8 >= 0 ? '+' : ''}{deviationAnalysis.deviations.M8.toFixed(1)}%
+                        <div
+                          className={`rounded p-2 ${Math.abs(deviationAnalysis.deviations.M8) <= 10 ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}
+                        >
+                          <strong>M8:</strong>{" "}
+                          {deviationAnalysis.deviations.M8 >= 0 ? "+" : ""}
+                          {deviationAnalysis.deviations.M8.toFixed(1)}%
                         </div>
                       )}
                     </div>
@@ -1033,28 +1101,30 @@ function App() {
                 )}
 
                 {/* Derinlik Daraltma Önerisi */}
-                {deviationAnalysis.needsNarrowing && deviationAnalysis.exactValue && (
-                  <div className="rounded-md bg-orange-100 p-3">
-                    <div className="text-sm text-orange-800">
-                      <strong>⚠️ Yüksek Sapma Tespit Edildi!</strong>
-                      <br />
-                      Bazı yöntemler Exact değerinden %10'dan fazla sapıyor.
+                {deviationAnalysis.needsNarrowing &&
+                  deviationAnalysis.exactValue && (
+                    <div className="rounded-md bg-orange-100 p-3">
+                      <div className="text-sm text-orange-800">
+                        <strong>⚠️ Yüksek Sapma Tespit Edildi!</strong>
+                        <br />
+                        Bazı yöntemler Exact değerinden %10'dan fazla sapıyor.
+                      </div>
+                      <button
+                        onClick={handleNarrowDepth}
+                        className="mt-2 rounded bg-orange-600 px-3 py-1.5 text-sm text-white hover:bg-orange-700"
+                      >
+                        Derinliği Daralt
+                      </button>
                     </div>
-                    <button
-                      onClick={handleNarrowDepth}
-                      className="mt-2 rounded bg-orange-600 px-3 py-1.5 text-sm text-white hover:bg-orange-700"
-                    >
-                      Derinliği Daralt
-                    </button>
-                  </div>
-                )}
+                  )}
 
                 {/* Düşük Sapma Mesajı */}
-                {!deviationAnalysis.needsNarrowing && deviationAnalysis.exactValue && (
-                  <div className="text-sm text-green-700">
-                    ✅ Tüm yöntemler Exact değerine yakın (±%10 içinde)
-                  </div>
-                )}
+                {!deviationAnalysis.needsNarrowing &&
+                  deviationAnalysis.exactValue && (
+                    <div className="text-sm text-green-700">
+                      ✅ Tüm yöntemler Exact değerine yakın (±%10 içinde)
+                    </div>
+                  )}
               </div>
             )}
           </section>
@@ -1222,8 +1292,8 @@ function App() {
               5.515 × Σ√(Sᵢ × dᵢ / Gᵢ))
             </div>
             <div>
-              <strong>M8:</strong> Vsa = 4H / T — Poisson düzeltmeli periyot
-              (T = 4 × Σ[(hᵢ/Vsᵢ) × (Vpᵢ/(1.732×Vsᵢ))⁻⁰·²⁵])
+              <strong>M8:</strong> Vsa = 4H / T — Poisson düzeltmeli periyot (T
+              = 4 × Σ[(hᵢ/Vsᵢ) × (Vpᵢ/(1.732×Vsᵢ))⁻⁰·²⁵])
             </div>
             <div>
               <strong>ASWV–FSP:</strong> Vsa = 4H / T - Ortalama kesme dalga

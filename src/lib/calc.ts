@@ -31,7 +31,7 @@ function normalizeRho(rhoVal: number): number {
 
 export function trimLayersToDepth(
   layers: Layer[],
-  targetDepth: number
+  targetDepth: number,
 ): Layer[] {
   const out: Layer[] = [];
   let acc = 0;
@@ -63,7 +63,7 @@ export function computeG(vs: number, rhoKgPerM3: number): number {
 export function computeH(layers: Layer[]): number {
   return layers.reduce(
     (sum, L) => sum + (typeof L.d === "number" ? L.d : 0),
-    0
+    0,
   );
 }
 
@@ -134,7 +134,7 @@ export function computeVsaM5(layers: Layer[]): number | null {
 /** M3 — MOC-2008 (Meksika Yönetmeliği) */
 export function computeTM3_MOC(
   layersSurfaceDown: Layer[],
-  defaultRhoKgPerM3: number = 1900
+  defaultRhoKgPerM3: number = 1900,
 ): number | null {
   if (!layersSurfaceDown.length) return null;
 
@@ -146,7 +146,7 @@ export function computeTM3_MOC(
   for (const L of bottomUp) {
     if (typeof L.d !== "number" || typeof L.vs !== "number") return null;
     const rho = normalizeRho(
-      typeof L.rho === "number" ? L.rho : defaultRhoKgPerM3
+      typeof L.rho === "number" ? L.rho : defaultRhoKgPerM3,
     );
     if (!(rho > 0)) return null;
     const G = computeG(L.vs, rho);
@@ -169,7 +169,7 @@ export function computeTM3_MOC(
     const L = bottomUp[k];
     if (typeof L.d !== "number" || typeof L.vs !== "number") return null;
     const rho = normalizeRho(
-      typeof L.rho === "number" ? L.rho : defaultRhoKgPerM3
+      typeof L.rho === "number" ? L.rho : defaultRhoKgPerM3,
     );
     const d = L.d;
     const wb = w[k],
@@ -185,12 +185,12 @@ export function computeTM3_MOC(
 /** M6 — Rayleigh Method (Adapted for Soil Profiles) [cite: 1197] */
 export function computeTM3_RAYLEIGH(
   layersSurfaceDown: Layer[],
-  defaultRhoKgPerM3: number = 1900
+  defaultRhoKgPerM3: number = 1900,
 ): number | null {
   if (!layersSurfaceDown.length) return null;
   const n = layersSurfaceDown.length;
   // Tabandan yüzeye sıralama (i=0 Base, i=n-1 Surface)
-  const bottomUp: Layer[] = [...layersSurfaceDown].reverse(); 
+  const bottomUp: Layer[] = [...layersSurfaceDown].reverse();
   const H = computeH(bottomUp);
   if (!(H > 0)) return null;
 
@@ -203,7 +203,7 @@ export function computeTM3_RAYLEIGH(
     const rhoValue = normalizeRho(
       typeof bottomUp[i].rho === "number" && bottomUp[i].rho !== ""
         ? (bottomUp[i].rho as number)
-        : defaultRhoKgPerM3
+        : defaultRhoKgPerM3,
     );
     rho[i] = rhoValue;
     G[i] = computeG(bottomUp[i].vs as number, rhoValue);
@@ -229,7 +229,7 @@ export function computeTM3_RAYLEIGH(
   let sumDen = 0;
   for (let i = 0; i < n; i++) {
     // (H - Hi) yerine burada tabandan yükseklik ile orantılı mod şekli varsayımı yaygındır
-    // Ancak makalede f_i = m_i * u_i şeklinde basitleştirilebilir. 
+    // Ancak makalede f_i = m_i * u_i şeklinde basitleştirilebilir.
     // Burada makaledeki (Eq 40) gibi lineer artan deplasman varsayımıyla kuvvet hesabı:
     sumDen += m[i] * posFromBase[i];
   }
@@ -245,7 +245,7 @@ export function computeTM3_RAYLEIGH(
   let cumF = 0;
   for (let i = n - 1; i >= 0; i--) {
     cumF += f[i];
-    Q[i] = cumF; 
+    Q[i] = cumF;
   }
 
   // Deplasmanlar delta_i [cite: 1205]
@@ -273,21 +273,21 @@ export function computeTM3_RAYLEIGH(
  */
 export function computeTM3_EXACT(
   layersSurfaceDown: Layer[],
-  defaultRhoKgPerM3: number = 1900
+  defaultRhoKgPerM3: number = 1900,
 ): number | null {
   if (!layersSurfaceDown.length) return null;
-  
+
   // Hesaplama Tabandan (Base) Yüzeye (Surface) doğru yapılır.
   // i=0: En alt katman (Taban), i=n-1: En üst katman (Yüzey)
   const bottomUp = [...layersSurfaceDown].reverse().map((L) => ({
     d: L.d as number,
     vs: L.vs as number,
     rho: normalizeRho(typeof L.rho === "number" ? L.rho : defaultRhoKgPerM3),
-    G: 0 // Hesapla doldurulacak
+    G: 0, // Hesapla doldurulacak
   }));
 
   // G = rho * Vs^2
-  bottomUp.forEach(L => {
+  bottomUp.forEach((L) => {
     L.G = computeG(L.vs, L.rho);
   });
 
@@ -297,39 +297,39 @@ export function computeTM3_EXACT(
     if (omega === 0) return 1e15; // Statik durum (sonsuz rijitlik kabulü ile)
 
     // --- Başlangıç: Katman 1 (Taban) ---
-    // Equation (27): T1 = G1 * a1 * cot(a1 * h1) 
+    // Equation (27): T1 = G1 * a1 * cot(a1 * h1)
     const L1 = bottomUp[0];
     const a1 = omega / L1.vs; // Wave number parameter [cite: 79]
     const arg1 = a1 * L1.d;
-    
+
     // JS Math.tan kullanır, cot(x) = 1/tan(x)
     const T1 = L1.G * a1 * (1.0 / Math.tan(arg1));
-    
+
     let T_prev = T1;
 
     // --- Yineleme: Katman 2'den n'e kadar ---
-    // Equation (25) 
+    // Equation (25)
     for (let i = 1; i < bottomUp.length; i++) {
       const Li = bottomUp[i];
       const ai = omega / Li.vs;
       const argi = ai * Li.d;
-      
+
       const Gai = Li.G * ai;
       const cotTerm = 1.0 / Math.tan(argi);
-      
+
       // Equation (25) Implementation:
       // T_i = [ - (Gi*ai)^2 + T_{i-1} * Gi*ai * cot(ai*hi) ] / [ T_{i-1} + Gi*ai * cot(ai*hi) ]
-      
+
       const termK = Gai * cotTerm; // Gi * ai * cot(ai*hi)
-      const termS = Gai * Gai;     // (Gi * ai)^2
+      const termS = Gai * Gai; // (Gi * ai)^2
 
       const numerator = -termS + T_prev * termK;
       const denominator = T_prev + termK;
 
       // Singularity (Payda sıfır) kontrolü
       if (Math.abs(denominator) < 1e-12) {
-          // Asimptotik nokta. İşaret değişimi takibi için büyük değer döndür.
-          return denominator >= 0 ? 1e15 : -1e15; 
+        // Asimptotik nokta. İşaret değişimi takibi için büyük değer döndür.
+        return denominator >= 0 ? 1e15 : -1e15;
       }
 
       T_prev = numerator / denominator;
@@ -339,14 +339,14 @@ export function computeTM3_EXACT(
   }
 
   // --- Kök Bulma (Root Finding) ---
-  // T_n(omega) = 0 yapan ilk pozitif omega'yı arıyoruz 
-  
+  // T_n(omega) = 0 yapan ilk pozitif omega'yı arıyoruz
+
   const dOmega = 0.1; // Adım aralığı (hassasiyet için düşürülebilir)
   const maxOmega = 2000; // Üst sınır
   let omega = dOmega;
-  
+
   let f_prev = computeTn(omega);
-  
+
   while (omega < maxOmega) {
     const nextOmega = omega + dOmega;
     const f_curr = computeTn(nextOmega);
@@ -355,27 +355,27 @@ export function computeTM3_EXACT(
     // Asimptotik sıçramalar (örn: +sonsuzdan -sonsuza) kök değildir.
     // Ancak T_n fonksiyonu sürekli (continuous) kabul edilir, asimptotlar hariç.
     // Temel periyot için genellikle ilk "smooth" geçişi ararız.
-    
+
     if (f_curr * f_prev <= 0) {
       // Bisection Method (İkiye bölme) ile hassas kök bulma
       let a = omega;
       let b = nextOmega;
       const tol = 1e-6;
-      
-      for(let k=0; k<100; k++) {
+
+      for (let k = 0; k < 100; k++) {
         const mid = (a + b) / 2;
         const f_mid = computeTn(mid);
-        
+
         if (f_mid * f_prev <= 0) {
           b = mid;
         } else {
           a = mid;
-          f_prev = f_mid; 
+          f_prev = f_mid;
         }
-        
+
         if (Math.abs(b - a) < tol) break;
       }
-      
+
       const omegaFundamental = (a + b) / 2;
       return (2 * Math.PI) / omegaFundamental; // T = 2*pi / omega
     }
@@ -391,7 +391,7 @@ export function computeTM3_EXACT(
 export function computeTM7_PROPOSED(
   layersSurfaceDown: Layer[],
   defaultRhoKgPerM3: number = 1900,
-  useSingleLayerConstant: boolean = false
+  useSingleLayerConstant: boolean = false,
 ): number | null {
   if (!layersSurfaceDown.length) return null;
 
@@ -410,7 +410,7 @@ export function computeTM7_PROPOSED(
     if (typeof Li.vs !== "number" || Li.vs <= 0) return null;
 
     const rhoVal = normalizeRho(
-      typeof Li.rho === "number" ? Li.rho : defaultRhoKgPerM3
+      typeof Li.rho === "number" ? Li.rho : defaultRhoKgPerM3,
     );
     if (!(rhoVal > 0)) return null;
 
@@ -456,7 +456,7 @@ export function computeVsaFromT(H: number, T: number | null): number | null {
 
 export function computeVsaM6(
   layers: Layer[],
-  defaultRhoKgPerM3: number = 1900
+  defaultRhoKgPerM3: number = 1900,
 ): number | null {
   const H = computeH(layers);
   if (!(H > 0)) return null;
@@ -467,7 +467,7 @@ export function computeVsaM6(
 
 export function computeVsaM7(
   layers: Layer[],
-  defaultRhoKgPerM3: number = 1900
+  defaultRhoKgPerM3: number = 1900,
 ): number | null {
   const H = computeH(layers);
   if (!(H > 0)) return null;
@@ -476,13 +476,13 @@ export function computeVsaM7(
   return (4 * H) / T;
 }
 
-/** 
+/**
  * M8 — Kütle-Esneklik + Poisson Düzeltmesi (Vp dahil)
- * 
+ *
  * T_M8 = 4 * sqrt( (Σ h_i * ρ_i) * (Σ h_i / G_i) ) * κ_Poisson
- * 
+ *
  * κ_Poisson = ( (Σ Vp_i/Vs_i) / (n * 1.73) )^0.20
- * 
+ *
  * Burada:
  * - h_i: Tabaka kalınlığı (m)
  * - ρ_i: Kütle yoğunluğu (kg/m³)
@@ -490,7 +490,7 @@ export function computeVsaM7(
  * - Vp_i: Basınç dalgası hızı (m/s)
  * - Vs_i: Kayma dalgası hızı (m/s)
  * - 1.73 ≈ √3: İdeal elastik ortamda Vp/Vs oranı
- * 
+ *
  * Vp verisi yoksa, ampirik bağıntı kullanılır:
  * Vp = 1.16 * Vs + 360 (Kuru zemin için yaklaşık)
  * veya doygun zemin için Vp ≈ 1500 m/s varsayılabilir
@@ -498,12 +498,12 @@ export function computeVsaM7(
 export function computeTM8_POISSON(
   layersSurfaceDown: Layer[],
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  _defaultRhoKgPerM3: number = 1900  // Eski formülde kullanılıyordu, API uyumluluğu için tutuldu
+  _defaultRhoKgPerM3: number = 1900, // Eski formülde kullanılıyordu, API uyumluluğu için tutuldu
 ): number | null {
   // ═══════════════════════════════════════════════════════════════════════════
   // M8 REVİZE: Tabaka Bazlı Poisson Düzeltmeli Periyot Hesabı
   // ═══════════════════════════════════════════════════════════════════════════
-  // 
+  //
   // FORMÜL:
   //   T_M8 = 4 × Σ [ (h_i / Vs_i) × κ_i ]
   //   κ_i = ( Vp_i / (1.73 × Vs_i) )^(-0.65)
@@ -529,12 +529,12 @@ export function computeTM8_POISSON(
   if (!layersSurfaceDown.length) return null;
 
   // Sabitler
-  const VP_VS_REF = 1.732;  // √3 ≈ 1.732 (ideal elastik ortam referansı, ν = 0.25)
-  const VP_VS_MIN = 1.4;    // Teorik alt sınır (çok kuru/sert kaya, ν ≈ 0)
-  const VP_VS_MAX = 5.0;    // Pratik üst sınır (doygun zemin, sıvılaşma riski limiti)
-  const EXPONENT = -0.25;   // Düzeltme katsayısı üssü (kalibrasyon sonucu: 9 Vp'li presette %15.57 hata, M1'e göre %24.7 iyileşme)
+  const VP_VS_REF = 1.732; // √3 ≈ 1.732 (ideal elastik ortam referansı, ν = 0.25)
+  const VP_VS_MIN = 1.4; // Teorik alt sınır (çok kuru/sert kaya, ν ≈ 0)
+  const VP_VS_MAX = 5.0; // Pratik üst sınır (doygun zemin, sıvılaşma riski limiti)
+  const EXPONENT = -0.25; // Düzeltme katsayısı üssü (kalibrasyon sonucu: 9 Vp'li presette %15.57 hata, M1'e göre %24.7 iyileşme)
 
-  let sumCorrectedPeriod = 0;  // Σ [ (h_i / Vs_i) × κ_i ]
+  let sumCorrectedPeriod = 0; // Σ [ (h_i / Vs_i) × κ_i ]
 
   for (const L of layersSurfaceDown) {
     // Validasyon
@@ -589,7 +589,7 @@ export function computeTM8_POISSON(
 
 export function computeVsaM8(
   layers: Layer[],
-  defaultRhoKgPerM3: number = 1900
+  defaultRhoKgPerM3: number = 1900,
 ): number | null {
   const H = computeH(layers);
   if (!(H > 0)) return null;
@@ -603,10 +603,10 @@ export function computeVsaM8(
 export function computeResults(
   layersSurfaceDown: Layer[],
   defaultRho: number = 1900,
-  targetDepthM12: number = Number.POSITIVE_INFINITY, 
-  targetDepthM3: number = Number.POSITIVE_INFINITY, 
+  targetDepthM12: number = Number.POSITIVE_INFINITY,
+  targetDepthM3: number = Number.POSITIVE_INFINITY,
   m3DepthMode: "TOTAL" | "TARGET" = "TOTAL",
-  m3Formula: "MOC" | "RAYLEIGH" | "EXACT" = "MOC"
+  m3Formula: "MOC" | "RAYLEIGH" | "EXACT" = "MOC",
 ): Result | null {
   // 1. Grup: M1, M2, M4, M5 (Geometrik/Basit Metodlar)
   const Ls12 = isFinite(targetDepthM12)
@@ -651,8 +651,8 @@ export function computeResults(
     m3Formula === "MOC"
       ? computeTM3_MOC(Ls3, defaultRho)
       : m3Formula === "RAYLEIGH"
-      ? computeTM3_RAYLEIGH(Ls3, defaultRho)
-      : computeTM3_EXACT(Ls3, defaultRho);
+        ? computeTM3_RAYLEIGH(Ls3, defaultRho)
+        : computeTM3_EXACT(Ls3, defaultRho);
   const Vsa_M3 = computeVsaFromT(H3, T_M3);
 
   // --- M8 (Kütle-Esneklik + Poisson Düzeltmesi) ---

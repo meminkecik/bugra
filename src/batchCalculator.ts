@@ -63,10 +63,10 @@ export function calculateAllPresets(targetDepth?: number): {
     const result = computeResults(
       preset.layers,
       preset.defaultRho || 1900,
-      depthToUse, 
-      depthToUse, 
-      m3Mode, 
-      "MOC" // M3 sütunu için standart Meksika formülü
+      depthToUse,
+      depthToUse,
+      m3Mode,
+      "MOC", // M3 sütunu için standart Meksika formülü
     );
 
     if (result) {
@@ -139,7 +139,7 @@ export function printTable(data: { results: BatchResult[] }) {
       "M3".padEnd(8) +
       "M7".padEnd(8) +
       "Exact".padEnd(8) +
-      (data.results[0]?.diff ? "Diff(Exact)" : "")
+      (data.results[0]?.diff ? "Diff(Exact)" : ""),
   );
   console.log("-".repeat(95));
 
