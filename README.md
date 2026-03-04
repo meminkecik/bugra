@@ -1,4 +1,4 @@
-# Jeoteknik Hesaplama Asistanı - M1 + M2 + M3 VSA
+# Geoteknik Hesaplama Asistanı - M1 + M2 + M3 VSA
 
 Çok katmanlı zemin için ortalama kesme dalga hızı (VSA) hesaplama uygulaması. M1, M2, M3, M4, M5, M6 ve M7 yöntemlerini destekler.
 

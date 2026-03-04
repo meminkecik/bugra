@@ -13,6 +13,7 @@ export type BatchResult = {
     M5: number;
     M6: number;
     M7: number;
+    M8: number;
     Exact: number;
   };
   // Beklenen değerler (Makale verileriyle karşılaştırma için)
@@ -24,6 +25,7 @@ export type BatchResult = {
     M5?: number;
     M6?: number;
     M7?: number;
+    M8?: number;
     Exact?: number;
   };
   // Fark analizi
@@ -35,6 +37,7 @@ export type BatchResult = {
     M5: string;
     M6: string;
     M7: string;
+    M8: string;
     Exact: string;
   };
 };
@@ -75,6 +78,7 @@ export function calculateAllPresets(targetDepth?: number): {
         M5: result.Vsa_M5 ?? 0,
         M6: result.Vsa_M6 ?? 0,
         M7: result.Vsa_M7 ?? 0,
+        M8: result.Vsa_M8 ?? 0,
         Exact: result.Vsa_Exact ?? 0,
       };
 
@@ -97,6 +101,7 @@ export function calculateAllPresets(targetDepth?: number): {
           M5: exp.Vsa_M5,
           M6: exp.Vsa_M6,
           M7: exp.Vsa_M7,
+          M8: exp.Vsa_M8,
           Exact: exp.Exact,
         };
         batchResult.diff = {
@@ -107,6 +112,7 @@ export function calculateAllPresets(targetDepth?: number): {
           M5: formatDiff(resVsa.M5, exp.Vsa_M5),
           M6: formatDiff(resVsa.M6, exp.Vsa_M6),
           M7: formatDiff(resVsa.M7, exp.Vsa_M7),
+          M8: formatDiff(resVsa.M8, exp.Vsa_M8),
           Exact: formatDiff(resVsa.Exact, exp.Exact),
         };
       }

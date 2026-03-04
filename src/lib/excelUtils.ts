@@ -22,6 +22,7 @@ export interface ExcelMeasurement {
     Vsa_M5?: number;
     Vsa_M6?: number;
     Vsa_M7?: number;
+    Vsa_M8?: number;
   };
 }
 
@@ -699,6 +700,7 @@ export function exportToExcel(
       "Vsa M5 (m/s)",
       "Vsa M6 (m/s)",
       "Vsa M7 (m/s)",
+      "Vsa M8 (m/s)",
       "Vsa Exact (m/s)",
     ],
     ...results.map((result, index) => {
@@ -725,6 +727,7 @@ export function exportToExcel(
         result.Vsa_M5?.toFixed(1) || "—",
         result.Vsa_M6?.toFixed(1) || "—",
         result.Vsa_M7?.toFixed(1) || "—",
+        result.Vsa_M8?.toFixed(1) || "—",
         result.Vsa_Exact?.toFixed(1) || "—",
       ];
     }),
@@ -750,6 +753,7 @@ export function exportToExcel(
     { wch: 12 }, // Vsa M5
     { wch: 12 }, // Vsa M6
     { wch: 12 }, // Vsa M7
+    { wch: 12 }, // Vsa M8
     { wch: 12 }, // Vsa Exact
   ];
   XLSX.utils.book_append_sheet(wb, summaryWs, "VSA Özet Sonuçları");
@@ -954,6 +958,7 @@ export function exportToExcel(
         ["Vsa M5", result.Vsa_M5?.toFixed(1) || "—", "m/s"],
         ["Vsa M6", result.Vsa_M6?.toFixed(1) || "—", "m/s"],
         ["Vsa M7", result.Vsa_M7?.toFixed(1) || "—", "m/s"],
+        ["Vsa M8", result.Vsa_M8?.toFixed(1) || "—", "m/s"],
         ["Vsa Exact", result.Vsa_Exact?.toFixed(1) || "—", "m/s"],
       ];
 
@@ -981,6 +986,11 @@ export function exportToExcel(
         detailData.push([
           "Vsa M7",
           vs30Result.Vsa_M7?.toFixed(1) || "—",
+          "m/s",
+        ]);
+        detailData.push([
+          "Vsa M8",
+          vs30Result.Vsa_M8?.toFixed(1) || "—",
           "m/s",
         ]);
         detailData.push([

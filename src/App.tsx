@@ -90,7 +90,7 @@ function App() {
     }
   }, [result, currentPreset]);
 
-  // Basit sapma analizi fonksiyonu
+  // Basit sapma analizi fonksiyonu - Exact değerine göre sapma hesaplar
   function analyzeDeviationsSimple(
     result: Result,
     expected: {
@@ -101,73 +101,69 @@ function App() {
       Vsa_M5?: number;
       Vsa_M6?: number;
       Vsa_M7?: number;
+      Vsa_M8?: number;
       Exact?: number;
     }
   ): {
     deviations: {
-      M1: number;
-      M2: number;
-      M3: number;
+      M1?: number;
+      M2?: number;
+      M3?: number;
       M4?: number;
       M5?: number;
       M6?: number;
       M7?: number;
-      Exact?: number;
+      M8?: number;
     };
+    exactValue: number | null;
     highDeviations: string[];
     needsNarrowing: boolean;
   } {
-    const calcDev = (calc: number, exp: number) =>
-      Math.abs((calc - exp) / exp) * 100;
-    const isHigh = (calc: number, exp: number) => calcDev(calc, exp) > 5;
-
-    const deviations = {
-      M1: calcDev(result.Vsa_M1, expected.Vsa_M1),
-      M2: calcDev(result.Vsa_M2, expected.Vsa_M2),
-      M3: calcDev(result.Vsa_M3, expected.Vsa_M3),
-      ...(expected.Vsa_M4 && { M4: calcDev(result.Vsa_M4, expected.Vsa_M4) }),
-      ...(expected.Vsa_M5 &&
-        result.Vsa_M5 && { M5: calcDev(result.Vsa_M5, expected.Vsa_M5) }),
-      ...(expected.Vsa_M6 &&
-        result.Vsa_M6 && { M6: calcDev(result.Vsa_M6, expected.Vsa_M6) }),
-      ...(expected.Vsa_M7 &&
-        result.Vsa_M7 && { M7: calcDev(result.Vsa_M7, expected.Vsa_M7) }),
-      ...(expected.Exact &&
-        result.Vsa_Exact && {
-          Exact: calcDev(result.Vsa_Exact, expected.Exact),
-        }),
+    // Exact değerine göre sapma hesapla (yüzde olarak, + veya - işaretli)
+    const calcDevFromExact = (calc: number | null | undefined, exact: number) => {
+      if (calc == null || exact <= 0) return undefined;
+      return ((calc - exact) / exact) * 100;
     };
 
+    const exactVal = expected.Exact || null;
+    
+    // Exact değeri yoksa boş döndür
+    if (!exactVal) {
+      return {
+        deviations: {},
+        exactValue: null,
+        highDeviations: [],
+        needsNarrowing: false,
+      };
+    }
+
+    const deviations = {
+      M1: calcDevFromExact(result.Vsa_M1, exactVal),
+      M2: calcDevFromExact(result.Vsa_M2, exactVal),
+      M3: calcDevFromExact(result.Vsa_M3, exactVal),
+      M4: calcDevFromExact(result.Vsa_M4, exactVal),
+      M5: calcDevFromExact(result.Vsa_M5, exactVal),
+      M6: calcDevFromExact(result.Vsa_M6, exactVal),
+      M7: calcDevFromExact(result.Vsa_M7, exactVal),
+      M8: calcDevFromExact(result.Vsa_M8, exactVal),
+    };
+
+    // %10'dan fazla sapma varsa highDeviations'a ekle
     const highDeviations: string[] = [];
-    if (isHigh(result.Vsa_M1, expected.Vsa_M1))
-      highDeviations.push(`M1: %${deviations.M1.toFixed(1)}`);
-    if (isHigh(result.Vsa_M2, expected.Vsa_M2))
-      highDeviations.push(`M2: %${deviations.M2.toFixed(1)}`);
-    if (isHigh(result.Vsa_M3, expected.Vsa_M3))
-      highDeviations.push(`M3: %${deviations.M3.toFixed(1)}`);
-    if (expected.Vsa_M4 && isHigh(result.Vsa_M4, expected.Vsa_M4))
-      highDeviations.push(`M4: %${deviations.M4!.toFixed(1)}`);
-    if (
-      expected.Vsa_M5 &&
-      result.Vsa_M5 &&
-      isHigh(result.Vsa_M5, expected.Vsa_M5)
-    )
-      highDeviations.push(`M5: %${deviations.M5!.toFixed(1)}`);
-    if (
-      expected.Vsa_M6 &&
-      result.Vsa_M6 &&
-      isHigh(result.Vsa_M6, expected.Vsa_M6)
-    )
-      highDeviations.push(`M6: %${deviations.M6!.toFixed(1)}`);
-    if (
-      expected.Vsa_M7 &&
-      result.Vsa_M7 &&
-      isHigh(result.Vsa_M7, expected.Vsa_M7)
-    )
-      highDeviations.push(`M7: %${deviations.M7!.toFixed(1)}`);
+    const isHigh = (dev: number | undefined) => dev !== undefined && Math.abs(dev) > 10;
+    
+    if (isHigh(deviations.M1)) highDeviations.push(`M1: ${deviations.M1! >= 0 ? '+' : ''}${deviations.M1!.toFixed(1)}%`);
+    if (isHigh(deviations.M2)) highDeviations.push(`M2: ${deviations.M2! >= 0 ? '+' : ''}${deviations.M2!.toFixed(1)}%`);
+    if (isHigh(deviations.M3)) highDeviations.push(`M3: ${deviations.M3! >= 0 ? '+' : ''}${deviations.M3!.toFixed(1)}%`);
+    if (isHigh(deviations.M4)) highDeviations.push(`M4: ${deviations.M4! >= 0 ? '+' : ''}${deviations.M4!.toFixed(1)}%`);
+    if (isHigh(deviations.M5)) highDeviations.push(`M5: ${deviations.M5! >= 0 ? '+' : ''}${deviations.M5!.toFixed(1)}%`);
+    if (isHigh(deviations.M6)) highDeviations.push(`M6: ${deviations.M6! >= 0 ? '+' : ''}${deviations.M6!.toFixed(1)}%`);
+    if (isHigh(deviations.M7)) highDeviations.push(`M7: ${deviations.M7! >= 0 ? '+' : ''}${deviations.M7!.toFixed(1)}%`);
+    if (isHigh(deviations.M8)) highDeviations.push(`M8: ${deviations.M8! >= 0 ? '+' : ''}${deviations.M8!.toFixed(1)}%`);
 
     return {
       deviations,
+      exactValue: exactVal,
       highDeviations,
       needsNarrowing: highDeviations.length > 0,
     };
@@ -277,7 +273,7 @@ function App() {
     setDeviationAnalysis(null);
   };
 
-  // Jeoteknik rapor indir
+  // Geoteknik rapor indir
   const downloadGeotechnicalReport = () => {
     if (!result || !currentPreset) return;
 
@@ -311,7 +307,7 @@ function App() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `jeoteknik-rapor-${currentPreset.name}.json`;
+    a.download = `geoteknik-rapor-${currentPreset.name}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -420,6 +416,7 @@ function App() {
           Vsa_M5: null,
           Vsa_M6: null,
           Vsa_M7: null,
+          Vsa_M8: null,
           Vsa_Exact: null,
         });
       }
@@ -447,6 +444,7 @@ function App() {
           Vsa_M5: null,
           Vsa_M6: null,
           Vsa_M7: null,
+          Vsa_M8: null,
           Vsa_Exact: null,
         }
       );
@@ -478,7 +476,7 @@ function App() {
         {/* Header */}
         <div className="mb-8 text-center">
           <h1 className="mb-2 text-4xl font-bold text-gray-900">
-            Jeoteknik Hesaplama Asistanı
+            Geoteknik Hesaplama Asistanı
           </h1>
           <p className="text-lg text-gray-600">
             Çok katmanlı zemin için ortalama kesme dalga hızı hesaplama
@@ -748,6 +746,9 @@ function App() {
                     Vs (m/s)
                   </th>
                   <th className="border border-gray-300 px-3 py-2 text-left">
+                    Vp (m/s)
+                  </th>
+                  <th className="border border-gray-300 px-3 py-2 text-left">
                     ρᵢ (kg/m³)
                   </th>
                   <th className="border border-gray-300 px-3 py-2 text-left">
@@ -782,6 +783,24 @@ function App() {
                         onChange={(e) =>
                           updateLayer(layer.id, "vs", Number(e.target.value))
                         }
+                        className="w-20 rounded border border-gray-300 px-2 py-1"
+                      />
+                    </td>
+                    <td className="border border-gray-300 px-3 py-2">
+                      <input
+                        type="number"
+                        min="1"
+                        step="10"
+                        value={layer.vp || ""}
+                        onChange={(e) =>
+                          updateLayer(
+                            layer.id,
+                            "vp",
+                            e.target.value === "" ? "" : Number(e.target.value)
+                          )
+                        }
+                        placeholder="Oto"
+                        title="Boş bırakılırsa ampirik formülle hesaplanır"
                         className="w-20 rounded border border-gray-300 px-2 py-1"
                       />
                     </td>
@@ -852,7 +871,7 @@ function App() {
                 disabled={!result}
                 className="rounded bg-purple-600 px-4 py-2 text-white hover:bg-purple-700 disabled:opacity-50"
               >
-                Jeoteknik Rapor İndir
+                Geoteknik Rapor İndir
               </button>
             )}
           </div>
@@ -924,6 +943,13 @@ function App() {
                 </div>
               </div>
 
+              <div className="rounded-lg bg-cyan-50 p-4">
+                <h3 className="mb-2 font-semibold text-cyan-900">M8</h3>
+                <div className="text-2xl font-bold text-cyan-700">
+                  {result.Vsa_M8?.toFixed(1) || "—"} m/s
+                </div>
+              </div>
+
               <div className="rounded-lg bg-pink-50 p-4">
                 <h3 className="mb-2 font-semibold text-pink-900">Exact</h3>
                 <div className="text-2xl font-bold text-pink-700">
@@ -939,73 +965,80 @@ function App() {
                   Sapma Analizi
                 </h3>
 
-                {/* Beklenen Çıktılar */}
-                <div className="mb-3 grid grid-cols-1 gap-2 text-sm md:grid-cols-4 lg:grid-cols-8">
-                  <div>
-                    <strong>M1:</strong> {currentPreset.expected.Vsa_M1} m/s
+                {/* Exact Referans Değeri */}
+                {deviationAnalysis.exactValue && (
+                  <div className="mb-3 rounded-md bg-pink-100 p-3">
+                    <strong className="text-pink-900">Referans (Exact): {deviationAnalysis.exactValue} m/s</strong>
+                    <p className="mt-1 text-xs text-pink-700">Tüm sapmalar bu değere göre hesaplanmıştır.</p>
                   </div>
-                  <div>
-                    <strong>M2:</strong> {currentPreset.expected.Vsa_M2} m/s
-                  </div>
-                  <div>
-                    <strong>M3:</strong> {currentPreset.expected.Vsa_M3} m/s
-                  </div>
-                  <div>
-                    <strong>M4:</strong> {currentPreset.expected.Vsa_M4 || "—"}{" "}
-                    m/s
-                  </div>
-                  <div>
-                    <strong>M5:</strong> {currentPreset.expected.Vsa_M5 || "—"}{" "}
-                    m/s
-                  </div>
-                  <div>
-                    <strong>M6:</strong> {currentPreset.expected.Vsa_M6 || "—"}{" "}
-                    m/s
-                  </div>
-                  <div>
-                    <strong>M7:</strong> {currentPreset.expected.Vsa_M7 || "—"}{" "}
-                    m/s
-                  </div>
-                  <div>
-                    <strong>Exact:</strong>{" "}
-                    {currentPreset.expected.Exact || "—"} m/s
-                  </div>
-                </div>
+                )}
 
-                {/* Sapma Yüzdeleri */}
-                <div className="mb-3 text-sm">
-                  <strong>Sapma Yüzdeleri:</strong>
-                  <ul className="mt-1 list-inside list-disc">
-                    <li>M1: %{deviationAnalysis.deviations.M1.toFixed(1)}</li>
-                    <li>M2: %{deviationAnalysis.deviations.M2.toFixed(1)}</li>
-                    <li>M3: %{deviationAnalysis.deviations.M3.toFixed(1)}</li>
-                    {deviationAnalysis.deviations.M4 !== undefined && (
-                      <li>M4: %{deviationAnalysis.deviations.M4.toFixed(1)}</li>
-                    )}
-                    {deviationAnalysis.deviations.M5 !== undefined && (
-                      <li>M5: %{deviationAnalysis.deviations.M5.toFixed(1)}</li>
-                    )}
-                    {deviationAnalysis.deviations.M6 !== undefined && (
-                      <li>M6: %{deviationAnalysis.deviations.M6.toFixed(1)}</li>
-                    )}
-                    {deviationAnalysis.deviations.M7 !== undefined && (
-                      <li>M7: %{deviationAnalysis.deviations.M7.toFixed(1)}</li>
-                    )}
-                    {deviationAnalysis.deviations.Exact !== undefined && (
-                      <li>
-                        Exact: %{deviationAnalysis.deviations.Exact.toFixed(1)}
-                      </li>
-                    )}
-                  </ul>
-                </div>
+                {/* Exact değeri yoksa uyarı */}
+                {!deviationAnalysis.exactValue && (
+                  <div className="mb-3 rounded-md bg-gray-100 p-3">
+                    <span className="text-gray-600">Bu preset için Exact referans değeri tanımlanmamış.</span>
+                  </div>
+                )}
+
+                {/* Sapma Yüzdeleri - Exact'e göre */}
+                {deviationAnalysis.exactValue && (
+                  <div className="mb-3">
+                    <strong className="text-sm text-yellow-900">Exact'e Göre Sapmalar:</strong>
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-sm md:grid-cols-4 lg:grid-cols-8">
+                      {deviationAnalysis.deviations.M1 !== undefined && (
+                        <div className={`rounded p-2 ${Math.abs(deviationAnalysis.deviations.M1) <= 10 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                          <strong>M1:</strong> {deviationAnalysis.deviations.M1 >= 0 ? '+' : ''}{deviationAnalysis.deviations.M1.toFixed(1)}%
+                        </div>
+                      )}
+                      {deviationAnalysis.deviations.M2 !== undefined && (
+                        <div className={`rounded p-2 ${Math.abs(deviationAnalysis.deviations.M2) <= 10 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                          <strong>M2:</strong> {deviationAnalysis.deviations.M2 >= 0 ? '+' : ''}{deviationAnalysis.deviations.M2.toFixed(1)}%
+                        </div>
+                      )}
+                      {deviationAnalysis.deviations.M3 !== undefined && (
+                        <div className={`rounded p-2 ${Math.abs(deviationAnalysis.deviations.M3) <= 10 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                          <strong>M3:</strong> {deviationAnalysis.deviations.M3 >= 0 ? '+' : ''}{deviationAnalysis.deviations.M3.toFixed(1)}%
+                        </div>
+                      )}
+                      {deviationAnalysis.deviations.M4 !== undefined && (
+                        <div className={`rounded p-2 ${Math.abs(deviationAnalysis.deviations.M4) <= 10 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                          <strong>M4:</strong> {deviationAnalysis.deviations.M4 >= 0 ? '+' : ''}{deviationAnalysis.deviations.M4.toFixed(1)}%
+                        </div>
+                      )}
+                      {deviationAnalysis.deviations.M5 !== undefined && (
+                        <div className={`rounded p-2 ${Math.abs(deviationAnalysis.deviations.M5) <= 10 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                          <strong>M5:</strong> {deviationAnalysis.deviations.M5 >= 0 ? '+' : ''}{deviationAnalysis.deviations.M5.toFixed(1)}%
+                        </div>
+                      )}
+                      {deviationAnalysis.deviations.M6 !== undefined && (
+                        <div className={`rounded p-2 ${Math.abs(deviationAnalysis.deviations.M6) <= 10 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                          <strong>M6:</strong> {deviationAnalysis.deviations.M6 >= 0 ? '+' : ''}{deviationAnalysis.deviations.M6.toFixed(1)}%
+                        </div>
+                      )}
+                      {deviationAnalysis.deviations.M7 !== undefined && (
+                        <div className={`rounded p-2 ${Math.abs(deviationAnalysis.deviations.M7) <= 10 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                          <strong>M7:</strong> {deviationAnalysis.deviations.M7 >= 0 ? '+' : ''}{deviationAnalysis.deviations.M7.toFixed(1)}%
+                        </div>
+                      )}
+                      {deviationAnalysis.deviations.M8 !== undefined && (
+                        <div className={`rounded p-2 ${Math.abs(deviationAnalysis.deviations.M8) <= 10 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                          <strong>M8:</strong> {deviationAnalysis.deviations.M8 >= 0 ? '+' : ''}{deviationAnalysis.deviations.M8.toFixed(1)}%
+                        </div>
+                      )}
+                    </div>
+                    <p className="mt-2 text-xs text-gray-500">
+                      Yeşil: ±%10 içinde | Kırmızı: %10'dan fazla sapma
+                    </p>
+                  </div>
+                )}
 
                 {/* Derinlik Daraltma Önerisi */}
-                {deviationAnalysis.needsNarrowing && (
+                {deviationAnalysis.needsNarrowing && deviationAnalysis.exactValue && (
                   <div className="rounded-md bg-orange-100 p-3">
                     <div className="text-sm text-orange-800">
                       <strong>⚠️ Yüksek Sapma Tespit Edildi!</strong>
                       <br />
-                      Derinlik aralığını daraltmamı ister misiniz?
+                      Bazı yöntemler Exact değerinden %10'dan fazla sapıyor.
                     </div>
                     <button
                       onClick={handleNarrowDepth}
@@ -1017,9 +1050,9 @@ function App() {
                 )}
 
                 {/* Düşük Sapma Mesajı */}
-                {!deviationAnalysis.needsNarrowing && (
+                {!deviationAnalysis.needsNarrowing && deviationAnalysis.exactValue && (
                   <div className="text-sm text-green-700">
-                    ✅ Sapmalar kabul edilebilir seviyede (%5'den küçük)
+                    ✅ Tüm yöntemler Exact değerine yakın (±%10 içinde)
                   </div>
                 )}
               </div>
@@ -1187,6 +1220,10 @@ function App() {
             <div>
               <strong>M7:</strong> Vsa = 4H / T — Önerilen yeni yöntem (T =
               5.515 × Σ√(Sᵢ × dᵢ / Gᵢ))
+            </div>
+            <div>
+              <strong>M8:</strong> Vsa = 4H / T — Poisson düzeltmeli periyot
+              (T = 4 × Σ[(hᵢ/Vsᵢ) × (Vpᵢ/(1.732×Vsᵢ))⁻⁰·²⁵])
             </div>
             <div>
               <strong>ASWV–FSP:</strong> Vsa = 4H / T - Ortalama kesme dalga
