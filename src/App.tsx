@@ -1292,8 +1292,8 @@ function App() {
               5.515 × Σ√(Sᵢ × dᵢ / Gᵢ))
             </div>
             <div>
-              <strong>M8:</strong> Vsa = 4H / T — Poisson düzeltmeli periyot (T
-              = 4 × Σ[(hᵢ/Vsᵢ) × (Vpᵢ/(1.732×Vsᵢ))⁻⁰·²⁵])
+              <strong>M8:</strong> Vsa = 4H / T — Poisson düzeltmeli periyot
+              (κ = (Σ(Vpᵢ/Vsᵢ)/(n×√3))⁰·⁰⁵, T = 4×√[(Σhᵢρᵢ)×(Σhᵢ/Gᵢ)]×κ)
             </div>
             <div>
               <strong>ASWV–FSP:</strong> Vsa = 4H / T - Ortalama kesme dalga

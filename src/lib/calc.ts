@@ -497,44 +497,34 @@ export function computeVsaM7(
  */
 export function computeTM8_POISSON(
   layersSurfaceDown: Layer[],
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  _defaultRhoKgPerM3: number = 1900, // Eski formülde kullanılıyordu, API uyumluluğu için tutuldu
+  defaultRhoKgPerM3: number = 1900,
 ): number | null {
   // ═══════════════════════════════════════════════════════════════════════════
-  // M8 REVİZE: Tabaka Bazlı Poisson Düzeltmeli Periyot Hesabı
+  // M8: Poisson Düzeltmeli Periyot Hesabı (Yeni Formül)
   // ═══════════════════════════════════════════════════════════════════════════
   //
   // FORMÜL:
-  //   T_M8 = 4 × Σ [ (h_i / Vs_i) × κ_i ]
-  //   κ_i = ( Vp_i / (1.73 × Vs_i) )^(-0.65)
+  //   κ_Poisson = ( Σ(Vp_i/Vs_i) / (n × √3) )^0.05
+  //   T_M8 = 4 × √[ (Σh_i×ρ_i) × (Σh_i/G_i) ] × κ_Poisson
   //
   // AÇIKLAMA:
-  // - Klasik M5 (Harmonik Ortalama) yöntemi, heterojen zeminlerde periyodu
-  //   "fazla" hesaplar (hızı "düşük" gösterir).
-  // - Exact (Transfer Matrisi) çözümü, tabakalar arası empedans farklarını
-  //   ve yansımaları dikkate alarak sistemin daha "rijit" davrandığını gösterir.
-  // - Bu revize formül, her tabakaya ayrı Poisson düzeltmesi uygulayarak
-  //   Exact sonuçlara çok daha yakın sonuçlar üretir.
-  //
-  // PARAMETRELER:
-  // - Üs kuvveti: -0.65 (eski -0.20 yerine, daha agresif düzeltme)
-  // - Referans Vp/Vs: 1.73 ≈ √3 (ideal elastik ortam, ν ≈ 0.25)
-  // - Vp/Vs limitleri: [1.4, 5.0] (fiziksel sınırlar)
+  // - G_i = ρ_i × Vs_i² (Kayma modülü)
+  // - κ_Poisson: Tüm tabakaların ortalama Vp/Vs oranına dayalı global düzeltme
+  // - √3 ≈ 1.732 (ideal elastik ortam, Poisson oranı ν = 0.25)
   //
   // REFERANSLAR:
   // - Keskin & Bozdoğan (2024): Exact vs Approximate yöntem karşılaştırması
-  // - Abdelrahman (2024), Karslı (2024): Vp/Vs oranının zemin kompetansı ile ilişkisi
   // ═══════════════════════════════════════════════════════════════════════════
 
   if (!layersSurfaceDown.length) return null;
 
-  // Sabitler
-  const VP_VS_REF = 1.732; // √3 ≈ 1.732 (ideal elastik ortam referansı, ν = 0.25)
-  const VP_VS_MIN = 1.4; // Teorik alt sınır (çok kuru/sert kaya, ν ≈ 0)
-  const VP_VS_MAX = 5.0; // Pratik üst sınır (doygun zemin, sıvılaşma riski limiti)
-  const EXPONENT = -0.25; // Düzeltme katsayısı üssü (kalibrasyon sonucu: 9 Vp'li presette %15.57 hata, M1'e göre %24.7 iyileşme)
+  const n = layersSurfaceDown.length; // Tabaka sayısı
+  const SQRT3 = Math.sqrt(3); // √3 ≈ 1.732
+  const EXPONENT = 0.05; // Kappa üssü
 
-  let sumCorrectedPeriod = 0; // Σ [ (h_i / Vs_i) × κ_i ]
+  let sumVpVs = 0; // Σ(Vp_i / Vs_i)
+  let sumHRho = 0; // Σ(h_i × ρ_i)
+  let sumHoverG = 0; // Σ(h_i / G_i)
 
   for (const L of layersSurfaceDown) {
     // Validasyon
@@ -543,6 +533,12 @@ export function computeTM8_POISSON(
 
     const h = L.d;
     const vs = L.vs;
+
+    // Yoğunluk: Verildiyse kullan, yoksa varsayılan
+    let rho = defaultRhoKgPerM3;
+    if (typeof L.rho === "number" && L.rho > 0) {
+      rho = L.rho < 100 ? L.rho * 1000 : L.rho; // t/m³ -> kg/m³ dönüşümü
+    }
 
     // Vp: Verildiyse kullan, yoksa ampirik bağıntı ile tahmin et
     // Ampirik: Vp ≈ 1.16 × Vs + 360 (Keçeli, 2010 - orta sıkılıktaki zemin)
@@ -553,36 +549,23 @@ export function computeTM8_POISSON(
       vp = 1.16 * vs + 360;
     }
 
-    // Vp/Vs oranını hesapla ve limitle
-    // - Alt limit 1.4: Poisson oranı negatif olamaz (fiziksel sınır)
-    // - Üst limit 5.0: Çok doygun zeminlerde aşırı düzeltmeyi önler
-    //   (Vp suyun hızına ~1500 m/s kilitlenebilir, Vs çok düşük olabilir)
-    const vpVsRaw = vp / vs;
-    const vpVsClamped = Math.max(VP_VS_MIN, Math.min(VP_VS_MAX, vpVsRaw));
+    // Kayma modülü: G = ρ × Vs²
+    const G = rho * vs * vs; // Pa
 
-    // Tabaka düzeltme katsayısı (κ_i)
-    // κ = ( Vp/Vs / 1.73 )^(-0.65)
-    //
-    // DAVRANIŞI:
-    // - Vp/Vs = 1.73 (referans) → κ = 1.0 (düzeltme yok)
-    // - Vp/Vs > 1.73 (doygun)   → κ < 1.0 → periyot AZALIR → hız ARTAR
-    // - Vp/Vs < 1.73 (kuru)     → κ > 1.0 → periyot ARTAR → hız AZALIR
-    //
-    // Örnek: Vp/Vs = 3.0 (yüksek doygunluk)
-    //   κ = (3.0/1.73)^(-0.65) = (1.73)^(-0.65) ≈ 0.71
-    //   Periyot %29 azalır → Hız %41 artar
-    const kappa_i = Math.pow(vpVsClamped / VP_VS_REF, EXPONENT);
-
-    // Tabaka katkısı: (h / Vs) × κ
-    const layerPeriodContribution = (h / vs) * kappa_i;
-    sumCorrectedPeriod += layerPeriodContribution;
+    // Toplamları hesapla
+    sumVpVs += vp / vs; // Σ(Vp_i / Vs_i)
+    sumHRho += h * rho; // Σ(h_i × ρ_i)
+    sumHoverG += h / G; // Σ(h_i / G_i)
   }
 
   // Geçerlilik kontrolü
-  if (!(sumCorrectedPeriod > 0)) return null;
+  if (sumHRho <= 0 || sumHoverG <= 0) return null;
 
-  // T_M8 = 4 × Σ [ (h_i / Vs_i) × κ_i ]
-  const T_M8 = 4 * sumCorrectedPeriod;
+  // κ_Poisson = ( Σ(Vp_i/Vs_i) / (n × √3) )^0.05
+  const kappaPoisson = Math.pow(sumVpVs / (n * SQRT3), EXPONENT);
+
+  // T_M8 = 4 × √[ (Σh_i×ρ_i) × (Σh_i/G_i) ] × κ_Poisson
+  const T_M8 = 4 * Math.sqrt(sumHRho * sumHoverG) * kappaPoisson;
 
   return T_M8;
 }
