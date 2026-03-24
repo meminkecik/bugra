@@ -321,7 +321,10 @@ function App() {
     };
 
     if (!currentPreset) {
-      return { siteHs: [] as StationDeviationRow[], vs30: [] as StationDeviationRow[] };
+      return {
+        siteHs: [] as StationDeviationRow[],
+        vs30: [] as StationDeviationRow[],
+      };
     }
 
     const computeForMode = (
@@ -1235,7 +1238,9 @@ function App() {
                 </div>
 
                 <div className="rounded-lg bg-purple-50 p-4">
-                  <h3 className="mb-2 font-semibold text-purple-900">M3 (MOC)</h3>
+                  <h3 className="mb-2 font-semibold text-purple-900">
+                    M3 (MOC)
+                  </h3>
                   <div className="text-2xl font-bold text-purple-700">
                     {result.Vsa_M3.toFixed(1)} m/s
                   </div>
@@ -1592,10 +1597,10 @@ function App() {
               yüzeyden itibaren Vs≥800 m/s seviyesine kadar H800 belirlenir.
               Eğer ölçümlerle H800 kanıtlanamazsa matriste H800&gt;100 varsayımı
               yapılır; ancak vs,H formülünde toplam profil derinliği kullanılır.
-              H800 ölçülmüşse vs,H hesabı kayaya kadar olan tabakalarla,
-              kayaya derinlik 100 m’den fazlaysa en fazla ilk 100 m ile
-              yapılır. Son olarak (H800 derinlik sınıfı) × (vs,H rijitlik
-              sınıfı) matris kesişimi alınır.
+              H800 ölçülmüşse vs,H hesabı kayaya kadar olan tabakalarla, kayaya
+              derinlik 100 m’den fazlaysa en fazla ilk 100 m ile yapılır. Son
+              olarak (H800 derinlik sınıfı) × (vs,H rijitlik sınıfı) matris
+              kesişimi alınır.
             </div>
             <div>
               <strong>ASWV–FSP:</strong> Vsa = 4H / T - Ortalama kesme dalga

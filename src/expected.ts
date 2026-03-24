@@ -14,7 +14,7 @@ export type Expected = {
 };
 
 export const EXPECTED_MAP: Record<string, Expected> = {
-  "Yoshida": {
+  Yoshida: {
     Vsa_M1: 590,
     Vsa_M2: 550,
     Vsa_M3: 674,
@@ -24,7 +24,7 @@ export const EXPECTED_MAP: Record<string, Expected> = {
     Vsa_M7: 587,
     Vsa_M8: 605,
   },
-  "Özkan": {
+  Özkan: {
     Vsa_M1: 397,
     Vsa_M2: 364,
     Vsa_M3: 381,
@@ -44,7 +44,7 @@ export const EXPECTED_MAP: Record<string, Expected> = {
     Vsa_M7: 1201,
     Vsa_M8: 1208,
   },
-  "Takabatake": {
+  Takabatake: {
     Vsa_M1: 283,
     Vsa_M2: 251,
     Vsa_M3: 225,
@@ -54,7 +54,7 @@ export const EXPECTED_MAP: Record<string, Expected> = {
     Vsa_M7: 226,
     Exact: 228,
   },
-  "Vijendra": {
+  Vijendra: {
     Vsa_M1: 266,
     Vsa_M2: 255,
     Vsa_M3: 292,
@@ -64,7 +64,7 @@ export const EXPECTED_MAP: Record<string, Expected> = {
     Vsa_M7: 278,
     Exact: 279,
   },
-  "Hasanoğlu": {
+  Hasanoğlu: {
     Vsa_M1: 352,
     Vsa_M2: 324,
     Vsa_M3: 367,
@@ -74,7 +74,7 @@ export const EXPECTED_MAP: Record<string, Expected> = {
     Vsa_M7: 343,
     Exact: 346,
   },
-  "Güllü": {
+  Güllü: {
     Vsa_M1: 398,
     Vsa_M2: 391,
     Vsa_M3: 476,
@@ -84,7 +84,7 @@ export const EXPECTED_MAP: Record<string, Expected> = {
     Vsa_M7: 429,
     Exact: 431,
   },
-  "Kokusho": {
+  Kokusho: {
     Vsa_M1: 534,
     Vsa_M2: 515,
     Vsa_M3: 699,

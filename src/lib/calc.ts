@@ -538,9 +538,7 @@ function classifyMatrixIntersection(
   return "F";
 }
 
-export function computeReferenceVsAndPeriod(
-  layers: Layer[],
-): {
+export function computeReferenceVsAndPeriod(layers: Layer[]): {
   hRef: number;
   h800: number | null;
   hVsUsed: number;

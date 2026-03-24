@@ -93,14 +93,18 @@ function findHeaderMap(rows: unknown[][]): HeaderMap | null {
       }
       if (
         header.includes("derinlik") &&
-        (header.includes("bas") || header.includes("start") || header.includes("top")) &&
+        (header.includes("bas") ||
+          header.includes("start") ||
+          header.includes("top")) &&
         map.depthStart == null
       ) {
         map.depthStart = c;
       }
       if (
         header.includes("derinlik") &&
-        (header.includes("son") || header.includes("end") || header.includes("bottom")) &&
+        (header.includes("son") ||
+          header.includes("end") ||
+          header.includes("bottom")) &&
         map.depthEnd == null
       ) {
         map.depthEnd = c;
@@ -152,13 +156,23 @@ function parseWorkbookProfiles(
       const city = String(row[headers.city] ?? "").trim();
       const district = String(row[headers.district] ?? "").trim();
       const stationCode = stationCodeToString(row[headers.stationCode]);
-      const method = String(row[headers.method] ?? "MOC").trim().toUpperCase() || "MOC";
+      const method =
+        String(row[headers.method] ?? "MOC")
+          .trim()
+          .toUpperCase() || "MOC";
 
       const depthStart = Number(row[headers.depthStart]);
       const depthEnd = Number(row[headers.depthEnd]);
       const vs = Number(row[headers.vs]);
 
-      if (!stationCode || !Number.isFinite(depthStart) || !Number.isFinite(depthEnd) || !Number.isFinite(vs) || depthEnd <= depthStart || vs <= 0) {
+      if (
+        !stationCode ||
+        !Number.isFinite(depthStart) ||
+        !Number.isFinite(depthEnd) ||
+        !Number.isFinite(vs) ||
+        depthEnd <= depthStart ||
+        vs <= 0
+      ) {
         continue;
       }
 
@@ -237,7 +251,11 @@ function mergeVpIntoBaseProfiles(
           );
         });
 
-        if (byDepthAndVs && typeof byDepthAndVs.vp === "number" && byDepthAndVs.vp > 0) {
+        if (
+          byDepthAndVs &&
+          typeof byDepthAndVs.vp === "number" &&
+          byDepthAndVs.vp > 0
+        ) {
           mergedVp = byDepthAndVs.vp;
         }
       }
@@ -249,11 +267,14 @@ function mergeVpIntoBaseProfiles(
       };
     });
 
-    const hasAnyVp = mergedLayers.some((layer) => typeof layer.vp === "number" && layer.vp > 0);
-    const display = `${baseProfile.city} - ${baseProfile.district} - ${baseProfile.stationCode}`
-      .replace(/\s+-\s+-\s+/g, " - ")
-      .replace(/\s+-\s+$/g, "")
-      .trim();
+    const hasAnyVp = mergedLayers.some(
+      (layer) => typeof layer.vp === "number" && layer.vp > 0,
+    );
+    const display =
+      `${baseProfile.city} - ${baseProfile.district} - ${baseProfile.stationCode}`
+        .replace(/\s+-\s+-\s+/g, " - ")
+        .replace(/\s+-\s+$/g, "")
+        .trim();
 
     presets.push({
       name: `${display} (${baseProfile.method})`,
