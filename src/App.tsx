@@ -267,6 +267,9 @@ function App() {
     useState<number>(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  const formatPresetLabel = (name: string) =>
+    name.replace(/^\s*●\s*/, "").trim();
+
   // Excel preset'lerini yükle
   useEffect(() => {
     const loadPresets = async () => {
@@ -286,6 +289,10 @@ function App() {
   const vsHReference = useMemo(() => {
     return computeReferenceVsAndPeriod(layers);
   }, [layers]);
+
+  const isDotPreset = useMemo(() => {
+    return currentPreset?.name.trim().startsWith("●") ?? false;
+  }, [currentPreset]);
 
   // Hedef derinliği belirle
   const targetDepth = useMemo(() => {
@@ -342,7 +349,9 @@ function App() {
 
       if (!computed) return [];
 
-      const exact = currentPreset.expected?.Exact ?? computed.Vsa_Exact;
+      const exact =
+        (isDotPreset ? undefined : currentPreset.expected?.Exact) ??
+        computed.Vsa_Exact;
       if (exact == null || !Number.isFinite(exact) || exact <= 0) return [];
 
       return [
@@ -366,7 +375,7 @@ function App() {
       siteHs: computeForMode(Number.POSITIVE_INFINITY, "TOTAL"),
       vs30: computeForMode(30, "TARGET"),
     };
-  }, [currentPreset]);
+  }, [currentPreset, isDotPreset]);
 
   // Sapma analizi
   useEffect(() => {
@@ -412,7 +421,8 @@ function App() {
       return ((calc - exact) / exact) * 100;
     };
 
-    const exactVal = expected.Exact ?? result.Vsa_Exact ?? null;
+    const exactVal =
+      (isDotPreset ? undefined : expected.Exact) ?? result.Vsa_Exact ?? null;
 
     // Exact değeri yoksa boş döndür
     if (!exactVal) {
@@ -1030,7 +1040,7 @@ function App() {
                 <option value="">Seçiniz...</option>
                 {availablePresets.map((preset) => (
                   <option key={preset.name} value={preset.name}>
-                    {preset.name}
+                    {formatPresetLabel(preset.name)}
                   </option>
                 ))}
               </select>
@@ -1291,7 +1301,7 @@ function App() {
                 </h3>
 
                 {/* Exact Referans Değeri */}
-                {deviationAnalysis.exactValue && (
+                {deviationAnalysis.exactValue && !isDotPreset && (
                   <div className="mb-3 rounded-md bg-pink-100 p-3">
                     <strong className="text-pink-900">
                       Referans (Exact): {deviationAnalysis.exactValue} m/s
