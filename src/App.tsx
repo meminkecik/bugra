@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import {
   computeResults,
+  computeReferenceVsAndPeriod,
   validateLayer,
   computeH,
   type Layer,
@@ -19,7 +20,231 @@ import {
 } from "./lib/excelUtils";
 import "./App.css";
 
-type DepthMode = "VS30" | "SITE_HS" | "CUSTOM";
+type DepthMode = "VS30" | "SITE_HS" | "VS_H" | "CUSTOM";
+
+type MethodKey = "M1" | "M2" | "M3" | "M4" | "M5" | "M6" | "M7";
+
+type StationDeviationRow = {
+  station: string;
+  exact: number;
+  deviations: Record<MethodKey, number | null>;
+};
+
+const METHOD_META: Array<{ key: MethodKey; label: string; color: string }> = [
+  { key: "M1", label: "M1", color: "#2563eb" },
+  { key: "M2", label: "M2", color: "#16a34a" },
+  { key: "M3", label: "M3", color: "#9333ea" },
+  { key: "M4", label: "M4", color: "#ea580c" },
+  { key: "M5", label: "M5", color: "#dc2626" },
+  { key: "M6", label: "M6", color: "#4f46e5" },
+  { key: "M7", label: "M7", color: "#0f766e" },
+];
+
+const METHOD_LABEL_OFFSET: Record<
+  MethodKey,
+  { dx: number; dy: number; anchor: "start" | "middle" | "end" }
+> = {
+  M1: { dx: 6, dy: -8, anchor: "start" },
+  M2: { dx: 8, dy: 10, anchor: "start" },
+  M3: { dx: -8, dy: -8, anchor: "end" },
+  M4: { dx: -8, dy: 10, anchor: "end" },
+  M5: { dx: 0, dy: -11, anchor: "middle" },
+  M6: { dx: 0, dy: 13, anchor: "middle" },
+  M7: { dx: 10, dy: 0, anchor: "start" },
+};
+
+function StationComparisonChart({
+  title,
+  rows,
+}: {
+  title: string;
+  rows: StationDeviationRow[];
+}) {
+  if (!rows.length) return null;
+
+  const allValues = rows.flatMap((row) =>
+    METHOD_META.map((m) => row.deviations[m.key]).filter(
+      (value): value is number => value != null && Number.isFinite(value),
+    ),
+  );
+
+  if (!allValues.length) return null;
+
+  const valueMin = Math.min(0, ...allValues);
+  const valueMax = Math.max(0, ...allValues);
+  const padding = Math.max(5, (valueMax - valueMin) * 0.1);
+  const yMin = valueMin - padding;
+  const yMax = valueMax + padding;
+
+  const margin = { top: 20, right: 20, bottom: 90, left: 55 };
+  const step = 28;
+  const width = Math.max(
+    900,
+    margin.left + margin.right + Math.max(1, rows.length - 1) * step + 80,
+  );
+  const height = 360;
+  const plotWidth = width - margin.left - margin.right;
+  const plotHeight = height - margin.top - margin.bottom;
+
+  const x = (index: number) => {
+    if (rows.length <= 1) return margin.left + plotWidth / 2;
+    return margin.left + (index / (rows.length - 1)) * plotWidth;
+  };
+
+  const y = (value: number) => {
+    const ratio = (value - yMin) / (yMax - yMin);
+    return margin.top + (1 - ratio) * plotHeight;
+  };
+
+  const zeroY = y(0);
+  const yTicks = 6;
+
+  return (
+    <div className="mb-6 rounded-lg bg-white p-6 shadow-sm">
+      <h3 className="mb-2 text-lg font-semibold text-gray-900">{title}</h3>
+      <p className="mb-3 text-xs text-gray-600">
+        Yatay referans çizgisi Exact’e göre %0 sapmayı gösterir. Noktalar M1–M7
+        yöntemlerinin Exact’e göre sapma (%) değerleridir.
+      </p>
+
+      <div className="mb-3 flex flex-wrap gap-3 text-xs">
+        {METHOD_META.map((method) => (
+          <div key={method.key} className="flex items-center gap-1">
+            <span
+              className="inline-block h-2.5 w-2.5 rounded-full"
+              style={{ backgroundColor: method.color }}
+            />
+            <span>{method.label}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="overflow-x-auto rounded border border-gray-200">
+        <svg width={width} height={height} role="img" aria-label={title}>
+          <rect x={0} y={0} width={width} height={height} fill="#ffffff" />
+
+          {Array.from({ length: yTicks + 1 }).map((_, idx) => {
+            const value = yMin + (idx / yTicks) * (yMax - yMin);
+            const yy = y(value);
+            return (
+              <g key={`ytick-${idx}`}>
+                <line
+                  x1={margin.left}
+                  y1={yy}
+                  x2={width - margin.right}
+                  y2={yy}
+                  stroke="#e5e7eb"
+                  strokeWidth={1}
+                />
+                <text
+                  x={margin.left - 8}
+                  y={yy + 4}
+                  textAnchor="end"
+                  className="fill-gray-500 text-[10px]"
+                >
+                  {value.toFixed(0)}%
+                </text>
+              </g>
+            );
+          })}
+
+          <line
+            x1={margin.left}
+            y1={zeroY}
+            x2={width - margin.right}
+            y2={zeroY}
+            stroke="#dc2626"
+            strokeWidth={1.5}
+            strokeDasharray="5 4"
+          />
+
+          <text
+            x={width - margin.right - 4}
+            y={zeroY - 6}
+            textAnchor="end"
+            className="fill-red-700 text-[10px]"
+          >
+            Exact (%0)
+          </text>
+
+          {rows.map((row, stationIndex) => {
+            const xx = x(stationIndex);
+            const labelStep = Math.max(1, Math.ceil(rows.length / 25));
+            const showLabel = stationIndex % labelStep === 0;
+            return (
+              <g key={`station-${stationIndex}`}>
+                <line
+                  x1={xx}
+                  y1={margin.top}
+                  x2={xx}
+                  y2={margin.top + plotHeight}
+                  stroke="#f3f4f6"
+                  strokeWidth={1}
+                />
+
+                {showLabel && (
+                  <text
+                    x={xx}
+                    y={height - margin.bottom + 10}
+                    transform={`rotate(60 ${xx} ${height - margin.bottom + 10})`}
+                    textAnchor="start"
+                    className="fill-gray-500 text-[10px]"
+                  >
+                    {stationIndex + 1}
+                  </text>
+                )}
+
+                {METHOD_META.map((method, methodIndex) => {
+                  const value = row.deviations[method.key];
+                  if (value == null || !Number.isFinite(value)) return null;
+                  const jitter = (methodIndex - 3) * 1.7;
+                  const pointX = xx + jitter;
+                  const yy = y(value);
+                  const labelOffset = METHOD_LABEL_OFFSET[method.key];
+                  return (
+                    <g key={`${stationIndex}-${method.key}`}>
+                      <circle
+                        cx={pointX}
+                        cy={yy}
+                        r={3.3}
+                        fill={method.color}
+                        opacity={0.9}
+                      >
+                        <title>{`${row.station} | ${method.label}: ${value.toFixed(1)}%`}</title>
+                      </circle>
+
+                      <text
+                        x={pointX + labelOffset.dx}
+                        y={yy + labelOffset.dy}
+                        textAnchor={labelOffset.anchor}
+                        className="fill-gray-700 text-[9px]"
+                      >
+                        {method.label}
+                      </text>
+                    </g>
+                  );
+                })}
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+
+      <p className="mt-2 text-[11px] text-gray-500">
+        {rows.length === 1
+          ? "Bu grafik yalnızca seçili istasyonun yöntem sapmalarını gösterir."
+          : "X ekseni istasyon indeksidir. İndeks-isim eşlemesi aşağıdadır."}
+      </p>
+      <div className="mt-2 max-h-28 overflow-y-auto rounded border border-gray-200 p-2 text-[11px] text-gray-700">
+        {rows.map((row, idx) => (
+          <div key={`map-${idx}`}>
+            {idx + 1}. {row.station}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function App() {
   const [layers, setLayers] = useState<Layer[]>([
@@ -58,12 +283,19 @@ function App() {
     loadPresets();
   }, []);
 
+  const vsHReference = useMemo(() => {
+    return computeReferenceVsAndPeriod(layers);
+  }, [layers]);
+
   // Hedef derinliği belirle
   const targetDepth = useMemo(() => {
     if (depthMode === "VS30") return 30;
     if (depthMode === "SITE_HS") return Number.POSITIVE_INFINITY; // tüm profil
+    if (depthMode === "VS_H") {
+      return vsHReference?.hRef ?? 0;
+    }
     return Math.max(1, Number(customDepth) || 30);
-  }, [depthMode, customDepth]);
+  }, [depthMode, customDepth, vsHReference]);
 
   // M3 modu belirle - SITE_HS için TOTAL, diğerleri için TARGET
   const m3Mode = useMemo(() => {
@@ -81,6 +313,57 @@ function App() {
       "MOC",
     );
   }, [layers, defaultRho, targetDepth, m3Mode]);
+
+  const stationComparisonData = useMemo(() => {
+    const toDeviation = (calc: number | null | undefined, exact: number) => {
+      if (calc == null || !Number.isFinite(calc) || exact <= 0) return null;
+      return ((calc - exact) / exact) * 100;
+    };
+
+    if (!currentPreset) {
+      return { siteHs: [] as StationDeviationRow[], vs30: [] as StationDeviationRow[] };
+    }
+
+    const computeForMode = (
+      targetDepthValue: number,
+      mode: "TOTAL" | "TARGET",
+    ): StationDeviationRow[] => {
+      const computed = computeResults(
+        currentPreset.layers,
+        currentPreset.defaultRho,
+        targetDepthValue,
+        targetDepthValue,
+        mode,
+        "MOC",
+      );
+
+      if (!computed) return [];
+
+      const exact = currentPreset.expected?.Exact ?? computed.Vsa_Exact;
+      if (exact == null || !Number.isFinite(exact) || exact <= 0) return [];
+
+      return [
+        {
+          station: currentPreset.name,
+          exact,
+          deviations: {
+            M1: toDeviation(computed.Vsa_M1, exact),
+            M2: toDeviation(computed.Vsa_M2, exact),
+            M3: toDeviation(computed.Vsa_M3, exact),
+            M4: toDeviation(computed.Vsa_M4, exact),
+            M5: toDeviation(computed.Vsa_M5, exact),
+            M6: toDeviation(computed.Vsa_M6, exact),
+            M7: toDeviation(computed.Vsa_M7, exact),
+          },
+        },
+      ];
+    };
+
+    return {
+      siteHs: computeForMode(Number.POSITIVE_INFINITY, "TOTAL"),
+      vs30: computeForMode(30, "TARGET"),
+    };
+  }, [currentPreset]);
 
   // Sapma analizi
   useEffect(() => {
@@ -101,7 +384,6 @@ function App() {
       Vsa_M5?: number;
       Vsa_M6?: number;
       Vsa_M7?: number;
-      Vsa_M8?: number;
       Exact?: number;
     },
   ): {
@@ -113,7 +395,6 @@ function App() {
       M5?: number;
       M6?: number;
       M7?: number;
-      M8?: number;
     };
     exactValue: number | null;
     highDeviations: string[];
@@ -128,7 +409,7 @@ function App() {
       return ((calc - exact) / exact) * 100;
     };
 
-    const exactVal = expected.Exact || null;
+    const exactVal = expected.Exact ?? result.Vsa_Exact ?? null;
 
     // Exact değeri yoksa boş döndür
     if (!exactVal) {
@@ -148,7 +429,6 @@ function App() {
       M5: calcDevFromExact(result.Vsa_M5, exactVal),
       M6: calcDevFromExact(result.Vsa_M6, exactVal),
       M7: calcDevFromExact(result.Vsa_M7, exactVal),
-      M8: calcDevFromExact(result.Vsa_M8, exactVal),
     };
 
     // %10'dan fazla sapma varsa highDeviations'a ekle
@@ -183,10 +463,6 @@ function App() {
     if (isHigh(deviations.M7))
       highDeviations.push(
         `M7: ${deviations.M7! >= 0 ? "+" : ""}${deviations.M7!.toFixed(1)}%`,
-      );
-    if (isHigh(deviations.M8))
-      highDeviations.push(
-        `M8: ${deviations.M8! >= 0 ? "+" : ""}${deviations.M8!.toFixed(1)}%`,
       );
 
     return {
@@ -444,7 +720,6 @@ function App() {
           Vsa_M5: null,
           Vsa_M6: null,
           Vsa_M7: null,
-          Vsa_M8: null,
           Vsa_Exact: null,
         });
       }
@@ -472,7 +747,6 @@ function App() {
           Vsa_M5: null,
           Vsa_M6: null,
           Vsa_M7: null,
-          Vsa_M8: null,
           Vsa_Exact: null,
         },
       );
@@ -683,6 +957,7 @@ function App() {
               >
                 <option value="VS30">Vs30 (30 m)</option>
                 <option value="SITE_HS">Saha Hs (tüm profil)</option>
+                <option value="VS_H">VS_H (H800: Vs≥800)</option>
                 <option value="CUSTOM">Özel</option>
               </select>
             </label>
@@ -920,74 +1195,91 @@ function App() {
               </div>
             </div>
 
+            {depthMode === "VS_H" && (
+              <div className="mb-4 rounded-md bg-cyan-50 p-3 text-sm text-cyan-900">
+                {vsHReference
+                  ? `H800: ${vsHReference.h800 != null ? `${vsHReference.h800.toFixed(2)} m` : "ölçümle kanıtlanamadı"} • Vs,H hesabı için kullanılan derinlik: ${vsHReference.hVsUsed.toFixed(2)} m • vs,H: ${vsHReference.vsRef.toFixed(1)} m/s • Derinlik sınıfı: ${vsHReference.depthClass} • Rijitlik sınıfı: ${vsHReference.stiffnessClass} • Matris: ${vsHReference.matrixClass} • Nihai sınıf: ${vsHReference.riskClass}${vsHReference.assumedRockDeeperThan100 ? " (matriste H800>100 varsayımı uygulandı)" : ""}`
+                  : "VS_H (H800) hesaplanamadı: profilde Vs≥800 bulunamadı."}
+              </div>
+            )}
+
             {/* VSA Sonuçları */}
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-4 lg:grid-cols-8">
-              <div className="rounded-lg bg-blue-50 p-4">
-                <h3 className="mb-2 font-semibold text-blue-900">M1</h3>
-                <div className="text-2xl font-bold text-blue-700">
-                  {result.Vsa_M1.toFixed(1)} m/s
+            {depthMode === "VS_H" ? (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                <div className="rounded-lg bg-cyan-50 p-4">
+                  <h3 className="mb-2 font-semibold text-cyan-900">
+                    VS_H Sonuç Değeri
+                  </h3>
+                  <div className="text-2xl font-bold text-cyan-700">
+                    {result.Vsa_M5?.toFixed(1) || "—"} m/s
+                  </div>
+                  <div className="mt-1 text-xs text-cyan-800">
+                    M5 (harmonik ortalama) ile hesaplanmıştır.
+                  </div>
                 </div>
               </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-4 lg:grid-cols-8">
+                <div className="rounded-lg bg-blue-50 p-4">
+                  <h3 className="mb-2 font-semibold text-blue-900">M1</h3>
+                  <div className="text-2xl font-bold text-blue-700">
+                    {result.Vsa_M1.toFixed(1)} m/s
+                  </div>
+                </div>
 
-              <div className="rounded-lg bg-green-50 p-4">
-                <h3 className="mb-2 font-semibold text-green-900">M2</h3>
-                <div className="text-2xl font-bold text-green-700">
-                  {result.Vsa_M2.toFixed(1)} m/s
+                <div className="rounded-lg bg-green-50 p-4">
+                  <h3 className="mb-2 font-semibold text-green-900">M2</h3>
+                  <div className="text-2xl font-bold text-green-700">
+                    {result.Vsa_M2.toFixed(1)} m/s
+                  </div>
                 </div>
-              </div>
 
-              <div className="rounded-lg bg-purple-50 p-4">
-                <h3 className="mb-2 font-semibold text-purple-900">M3 (MOC)</h3>
-                <div className="text-2xl font-bold text-purple-700">
-                  {result.Vsa_M3.toFixed(1)} m/s
+                <div className="rounded-lg bg-purple-50 p-4">
+                  <h3 className="mb-2 font-semibold text-purple-900">M3 (MOC)</h3>
+                  <div className="text-2xl font-bold text-purple-700">
+                    {result.Vsa_M3.toFixed(1)} m/s
+                  </div>
                 </div>
-              </div>
 
-              <div className="rounded-lg bg-orange-50 p-4">
-                <h3 className="mb-2 font-semibold text-orange-900">M4</h3>
-                <div className="text-2xl font-bold text-orange-700">
-                  {result.Vsa_M4.toFixed(1)} m/s
+                <div className="rounded-lg bg-orange-50 p-4">
+                  <h3 className="mb-2 font-semibold text-orange-900">M4</h3>
+                  <div className="text-2xl font-bold text-orange-700">
+                    {result.Vsa_M4.toFixed(1)} m/s
+                  </div>
                 </div>
-              </div>
 
-              <div className="rounded-lg bg-red-50 p-4">
-                <h3 className="mb-2 font-semibold text-red-900">M5</h3>
-                <div className="text-2xl font-bold text-red-700">
-                  {result.Vsa_M5?.toFixed(1) || "—"} m/s
+                <div className="rounded-lg bg-red-50 p-4">
+                  <h3 className="mb-2 font-semibold text-red-900">M5</h3>
+                  <div className="text-2xl font-bold text-red-700">
+                    {result.Vsa_M5?.toFixed(1) || "—"} m/s
+                  </div>
                 </div>
-              </div>
 
-              <div className="rounded-lg bg-indigo-50 p-4">
-                <h3 className="mb-2 font-semibold text-indigo-900">M6</h3>
-                <div className="text-2xl font-bold text-indigo-700">
-                  {result.Vsa_M6?.toFixed(1) || "—"} m/s
+                <div className="rounded-lg bg-indigo-50 p-4">
+                  <h3 className="mb-2 font-semibold text-indigo-900">M6</h3>
+                  <div className="text-2xl font-bold text-indigo-700">
+                    {result.Vsa_M6?.toFixed(1) || "—"} m/s
+                  </div>
                 </div>
-              </div>
 
-              <div className="rounded-lg bg-teal-50 p-4">
-                <h3 className="mb-2 font-semibold text-teal-900">M7</h3>
-                <div className="text-2xl font-bold text-teal-700">
-                  {result.Vsa_M7?.toFixed(1) || "—"} m/s
+                <div className="rounded-lg bg-teal-50 p-4">
+                  <h3 className="mb-2 font-semibold text-teal-900">M7</h3>
+                  <div className="text-2xl font-bold text-teal-700">
+                    {result.Vsa_M7?.toFixed(1) || "—"} m/s
+                  </div>
                 </div>
-              </div>
 
-              <div className="rounded-lg bg-cyan-50 p-4">
-                <h3 className="mb-2 font-semibold text-cyan-900">M8</h3>
-                <div className="text-2xl font-bold text-cyan-700">
-                  {result.Vsa_M8?.toFixed(1) || "—"} m/s
+                <div className="rounded-lg bg-pink-50 p-4">
+                  <h3 className="mb-2 font-semibold text-pink-900">Exact</h3>
+                  <div className="text-2xl font-bold text-pink-700">
+                    {result.Vsa_Exact?.toFixed(1) || "—"} m/s
+                  </div>
                 </div>
               </div>
-
-              <div className="rounded-lg bg-pink-50 p-4">
-                <h3 className="mb-2 font-semibold text-pink-900">Exact</h3>
-                <div className="text-2xl font-bold text-pink-700">
-                  {result.Vsa_Exact?.toFixed(1) || "—"} m/s
-                </div>
-              </div>
-            </div>
+            )}
 
             {/* Sapma Analizi ve Derinlik Daraltma Önerisi */}
-            {deviationAnalysis && currentPreset && (
+            {depthMode !== "VS_H" && deviationAnalysis && currentPreset && (
               <div className="mt-6 rounded-lg bg-yellow-50 p-4">
                 <h3 className="mb-3 font-semibold text-yellow-900">
                   Sapma Analizi
@@ -1020,7 +1312,7 @@ function App() {
                     <strong className="text-sm text-yellow-900">
                       Exact'e Göre Sapmalar:
                     </strong>
-                    <div className="mt-2 grid grid-cols-2 gap-2 text-sm md:grid-cols-4 lg:grid-cols-8">
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-sm md:grid-cols-4 lg:grid-cols-7">
                       {deviationAnalysis.deviations.M1 !== undefined && (
                         <div
                           className={`rounded p-2 ${Math.abs(deviationAnalysis.deviations.M1) <= 10 ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}
@@ -1084,15 +1376,6 @@ function App() {
                           {deviationAnalysis.deviations.M7.toFixed(1)}%
                         </div>
                       )}
-                      {deviationAnalysis.deviations.M8 !== undefined && (
-                        <div
-                          className={`rounded p-2 ${Math.abs(deviationAnalysis.deviations.M8) <= 10 ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}
-                        >
-                          <strong>M8:</strong>{" "}
-                          {deviationAnalysis.deviations.M8 >= 0 ? "+" : ""}
-                          {deviationAnalysis.deviations.M8.toFixed(1)}%
-                        </div>
-                      )}
                     </div>
                     <p className="mt-2 text-xs text-gray-500">
                       Yeşil: ±%10 içinde | Kırmızı: %10'dan fazla sapma
@@ -1128,6 +1411,19 @@ function App() {
               </div>
             )}
           </section>
+        )}
+
+        {currentPreset && depthMode !== "VS_H" && (
+          <>
+            <StationComparisonChart
+              title={`Seçili İstasyon — SITE_HS (Exact Referanslı Sapma): ${currentPreset.name}`}
+              rows={stationComparisonData.siteHs}
+            />
+            <StationComparisonChart
+              title={`Seçili İstasyon — VS30 (Exact Referanslı Sapma): ${currentPreset.name}`}
+              rows={stationComparisonData.vs30}
+            />
+          </>
         )}
 
         {/* Excel Format Bilgisi */}
@@ -1292,8 +1588,14 @@ function App() {
               5.515 × Σ√(Sᵢ × dᵢ / Gᵢ))
             </div>
             <div>
-              <strong>M8:</strong> Vsa = 4H / T — Poisson düzeltmeli periyot (κ
-              = (Σ(Vpᵢ/Vsᵢ)/(n×√3))⁰·⁰⁵, T = 4×√[(Σhᵢρᵢ)×(Σhᵢ/Gᵢ)]×κ)
+              <strong>VS_H derinlik modu:</strong> Derinlik seçimi için önce
+              yüzeyden itibaren Vs≥800 m/s seviyesine kadar H800 belirlenir.
+              Eğer ölçümlerle H800 kanıtlanamazsa matriste H800&gt;100 varsayımı
+              yapılır; ancak vs,H formülünde toplam profil derinliği kullanılır.
+              H800 ölçülmüşse vs,H hesabı kayaya kadar olan tabakalarla,
+              kayaya derinlik 100 m’den fazlaysa en fazla ilk 100 m ile
+              yapılır. Son olarak (H800 derinlik sınıfı) × (vs,H rijitlik
+              sınıfı) matris kesişimi alınır.
             </div>
             <div>
               <strong>ASWV–FSP:</strong> Vsa = 4H / T - Ortalama kesme dalga

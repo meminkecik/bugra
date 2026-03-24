@@ -7,6 +7,9 @@ export type Expected = {
   Vsa_M6?: number;
   Vsa_M7?: number;
   Vsa_M8?: number;
+  Vsa_M9?: number;
+  Vsa_M10?: number;
+  Vsa_Ref?: number;
   Exact?: number;
 };
 

@@ -17,7 +17,6 @@ export type Result = {
   Vsa_M5: number | null; // TBDY / NEHRP
   Vsa_M6: number | null; // Rayleigh Method (Adapted)
   Vsa_M7: number | null; // Önerilen Yöntem (Keskin & Bozdogan)
-  Vsa_M8: number | null; // Kütle-Esneklik + Poisson Düzeltmesi (Vp dahil)
   Vsa_Exact: number | null; // Exact: Modified Finite Element Transfer Matrix Method
 };
 
@@ -476,109 +475,125 @@ export function computeVsaM7(
   return (4 * H) / T;
 }
 
-/**
- * M8 — Kütle-Esneklik + Poisson Düzeltmesi (Vp dahil)
- *
- * T_M8 = 4 * sqrt( (Σ h_i * ρ_i) * (Σ h_i / G_i) ) * κ_Poisson
- *
- * κ_Poisson = ( (Σ Vp_i/Vs_i) / (n * 1.73) )^0.20
- *
- * Burada:
- * - h_i: Tabaka kalınlığı (m)
- * - ρ_i: Kütle yoğunluğu (kg/m³)
- * - G_i: Kayma modülü = ρ_i * Vs_i² (Pa)
- * - Vp_i: Basınç dalgası hızı (m/s)
- * - Vs_i: Kayma dalgası hızı (m/s)
- * - 1.73 ≈ √3: İdeal elastik ortamda Vp/Vs oranı
- *
- * Vp verisi yoksa, ampirik bağıntı kullanılır:
- * Vp = 1.16 * Vs + 360 (Kuru zemin için yaklaşık)
- * veya doygun zemin için Vp ≈ 1500 m/s varsayılabilir
- */
-export function computeTM8_POISSON(
-  layersSurfaceDown: Layer[],
-  defaultRhoKgPerM3: number = 1900,
+function findDepthAtOrAboveVsThreshold(
+  layers: Layer[],
+  thresholdVs: number,
 ): number | null {
-  // ═══════════════════════════════════════════════════════════════════════════
-  // M8: Poisson Düzeltmeli Periyot Hesabı (Yeni Formül)
-  // ═══════════════════════════════════════════════════════════════════════════
-  //
-  // FORMÜL:
-  //   κ_Poisson = ( Σ(Vp_i/Vs_i) / (n × √3) )^0.05
-  //   T_M8 = 4 × √[ (Σh_i×ρ_i) × (Σh_i/G_i) ] × κ_Poisson
-  //
-  // AÇIKLAMA:
-  // - G_i = ρ_i × Vs_i² (Kayma modülü)
-  // - κ_Poisson: Tüm tabakaların ortalama Vp/Vs oranına dayalı global düzeltme
-  // - √3 ≈ 1.732 (ideal elastik ortam, Poisson oranı ν = 0.25)
-  //
-  // REFERANSLAR:
-  // - Keskin & Bozdoğan (2024): Exact vs Approximate yöntem karşılaştırması
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  if (!layersSurfaceDown.length) return null;
-
-  const n = layersSurfaceDown.length; // Tabaka sayısı
-  const SQRT3 = Math.sqrt(3); // √3 ≈ 1.732
-  const EXPONENT = 0.05; // Kappa üssü
-
-  let sumVpVs = 0; // Σ(Vp_i / Vs_i)
-  let sumHRho = 0; // Σ(h_i × ρ_i)
-  let sumHoverG = 0; // Σ(h_i / G_i)
-
-  for (const L of layersSurfaceDown) {
-    // Validasyon
-    if (typeof L.d !== "number" || L.d <= 0) return null;
-    if (typeof L.vs !== "number" || L.vs <= 0) return null;
-
-    const h = L.d;
-    const vs = L.vs;
-
-    // Yoğunluk: Verildiyse kullan, yoksa varsayılan
-    let rho = defaultRhoKgPerM3;
-    if (typeof L.rho === "number" && L.rho > 0) {
-      rho = L.rho < 100 ? L.rho * 1000 : L.rho; // t/m³ -> kg/m³ dönüşümü
-    }
-
-    // Vp: Verildiyse kullan, yoksa ampirik bağıntı ile tahmin et
-    // Ampirik: Vp ≈ 1.16 × Vs + 360 (Keçeli, 2010 - orta sıkılıktaki zemin)
-    let vp: number;
-    if (typeof L.vp === "number" && L.vp > 0) {
-      vp = L.vp;
-    } else {
-      vp = 1.16 * vs + 360;
-    }
-
-    // Kayma modülü: G = ρ × Vs²
-    const G = rho * vs * vs; // Pa
-
-    // Toplamları hesapla
-    sumVpVs += vp / vs; // Σ(Vp_i / Vs_i)
-    sumHRho += h * rho; // Σ(h_i × ρ_i)
-    sumHoverG += h / G; // Σ(h_i / G_i)
+  let depth = 0;
+  for (const L of layers) {
+    if (typeof L.d !== "number" || typeof L.vs !== "number") return null;
+    if (!(L.d > 0) || !(L.vs > 0)) return null;
+    depth += L.d;
+    if (L.vs >= thresholdVs) return depth;
   }
-
-  // Geçerlilik kontrolü
-  if (sumHRho <= 0 || sumHoverG <= 0) return null;
-
-  // κ_Poisson = ( Σ(Vp_i/Vs_i) / (n × √3) )^0.05
-  const kappaPoisson = Math.pow(sumVpVs / (n * SQRT3), EXPONENT);
-
-  // T_M8 = 4 × √[ (Σh_i×ρ_i) × (Σh_i/G_i) ] × κ_Poisson
-  const T_M8 = 4 * Math.sqrt(sumHRho * sumHoverG) * kappaPoisson;
-
-  return T_M8;
+  return null;
 }
 
-export function computeVsaM8(
+export type H800DepthClass =
+  | "Very shallow"
+  | "Shallow"
+  | "Intermediate"
+  | "Deep";
+
+export type VsHStiffnessClass = "Stiff" | "Medium" | "Soft";
+export type VsHMatrixClass = "A" | "B" | "C" | "D" | "E" | "F";
+
+export function classifyH800Depth(h800: number): H800DepthClass {
+  if (h800 <= 5) return "Very shallow";
+  if (h800 <= 30) return "Shallow";
+  if (h800 <= 100) return "Intermediate";
+  return "Deep";
+}
+
+function classifyVsHStiffness(vsH: number): VsHStiffnessClass {
+  if (vsH >= 400) return "Stiff";
+  if (vsH >= 250) return "Medium";
+  return "Soft";
+}
+
+function classifyMatrixIntersection(
+  depthClass: H800DepthClass,
+  stiffnessClass: VsHStiffnessClass,
+): VsHMatrixClass {
+  if (depthClass === "Very shallow") {
+    if (stiffnessClass === "Stiff") return "A";
+    if (stiffnessClass === "Medium") return "A";
+    return "E";
+  }
+
+  if (depthClass === "Shallow") {
+    if (stiffnessClass === "Stiff") return "B";
+    if (stiffnessClass === "Medium") return "E";
+    return "E";
+  }
+
+  if (depthClass === "Intermediate") {
+    if (stiffnessClass === "Stiff") return "B";
+    if (stiffnessClass === "Medium") return "C";
+    return "D";
+  }
+
+  if (stiffnessClass === "Stiff") return "B";
+  if (stiffnessClass === "Medium") return "F";
+  return "F";
+}
+
+export function computeReferenceVsAndPeriod(
   layers: Layer[],
-  defaultRhoKgPerM3: number = 1900,
-): number | null {
-  const H = computeH(layers);
-  if (!(H > 0)) return null;
-  const T = computeTM8_POISSON(layers, defaultRhoKgPerM3);
-  if (T == null) return null;
-  return (4 * H) / T;
+): {
+  hRef: number;
+  h800: number | null;
+  hVsUsed: number;
+  assumedRockDeeperThan100: boolean;
+  vsRef: number;
+  tRef: number;
+  vsThresholdUsed: number;
+  depthClass: H800DepthClass;
+  stiffnessClass: VsHStiffnessClass;
+  matrixClass: VsHMatrixClass;
+  riskClass: VsHMatrixClass;
+} | null {
+  if (!layers.length) return null;
+
+  const h800 = findDepthAtOrAboveVsThreshold(layers, 800);
+  const assumedRockDeeperThan100 = h800 == null;
+  const assumedH800 = 100.0001;
+  const h800ForClass = h800 ?? assumedH800;
+
+  const totalDepth = computeH(layers);
+  const hVsUsed = h800 == null ? totalDepth : Math.min(h800, 100);
+  const hRef = hVsUsed;
+  const vsThresholdUsed = 800;
+
+  if (!(typeof hVsUsed === "number") || !(hVsUsed > 0)) return null;
+
+  const trimmed = trimLayersToDepth(layers, hVsUsed);
+  if (!trimmed.length) return null;
+
+  const vsRef = computeVsaM5(trimmed);
+  if (vsRef == null || !(vsRef > 0)) return null;
+
+  const tRef = (4 * hVsUsed) / vsRef;
+  if (!(tRef > 0)) return null;
+
+  const depthClass = classifyH800Depth(h800ForClass);
+  const stiffnessClass = classifyVsHStiffness(vsRef);
+  const matrixClass = classifyMatrixIntersection(depthClass, stiffnessClass);
+  const riskClass = matrixClass;
+
+  return {
+    hRef,
+    h800,
+    hVsUsed,
+    assumedRockDeeperThan100,
+    vsRef,
+    tRef,
+    vsThresholdUsed,
+    depthClass,
+    stiffnessClass,
+    matrixClass,
+    riskClass,
+  };
 }
 
 /** --------------------------- Compute Results (Ana Fonksiyon) --------------------------- **/
@@ -638,9 +653,6 @@ export function computeResults(
         : computeTM3_EXACT(Ls3, defaultRho);
   const Vsa_M3 = computeVsaFromT(H3, T_M3);
 
-  // --- M8 (Kütle-Esneklik + Poisson Düzeltmesi) ---
-  const Vsa_M8 = computeVsaM8(Ls3, defaultRho);
-
   // --- Exact (Modified Finite Element Transfer Matrix Method) ---
   const T_Exact = computeTM3_EXACT(Ls3, defaultRho);
   const Vsa_Exact = computeVsaFromT(H3, T_Exact);
@@ -656,7 +668,6 @@ export function computeResults(
     Vsa_M5,
     Vsa_M6,
     Vsa_M7,
-    Vsa_M8,
     Vsa_Exact,
   };
 }
