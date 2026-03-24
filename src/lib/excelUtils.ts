@@ -1,5 +1,6 @@
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
+import * as ExcelJS from "exceljs";
 import type { Layer, Result } from "./calc";
 
 export interface ExcelData {
@@ -25,6 +26,39 @@ export interface ExcelMeasurement {
     Vsa_M8?: number;
     Vsa_M9?: number;
   };
+}
+
+type ExportMethodKey = "M1" | "M2" | "M3" | "M4" | "M5" | "M6" | "M7";
+
+export interface StationModeExcelEntry {
+  stationName: string;
+  modeKey: string;
+  modeLabel: string;
+  targetDepth: number;
+  m3DepthMode: "TOTAL" | "TARGET";
+  method: string;
+  defaultRho: number;
+  layers: Layer[];
+  result: Result;
+  exactReference: number | null;
+  deviations: Record<ExportMethodKey, number | null>;
+  highDeviationMethods: string[];
+  needsNarrowing: boolean;
+  h800Summary?: string;
+}
+
+export interface StationModeExcelExportOptions {
+  filePrefix?: string;
+  summaryTitle?: string;
+  onProgress?: (progress: StationModeExcelExportProgress) => void;
+}
+
+export interface StationModeExcelExportProgress {
+  phase: "preparing" | "rendering" | "writing" | "done";
+  processed: number;
+  total: number;
+  percent: number;
+  message: string;
 }
 
 /**
@@ -1022,6 +1056,489 @@ export function exportToExcel(
 
   const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, "-");
   saveAs(blob, `vsa-coklu-sonuclari-${timestamp}.xlsx`);
+}
+
+/**
+ * İstasyon + Derinlik Modu odaklı ayrıntılı Excel çıktısı üretir.
+ * Her kayıt için katman verileri, formül sonuçları, sapma analizi ve grafik verisi sayfaya yazılır.
+ */
+export async function exportStationModeExcel(
+  entries: StationModeExcelEntry[],
+  options: StationModeExcelExportOptions = {},
+): Promise<void> {
+  if (!entries.length) return;
+
+  const totalEntries = entries.length;
+  const emitProgress = (
+    phase: StationModeExcelExportProgress["phase"],
+    processed: number,
+    percent: number,
+    message: string,
+  ) => {
+    options.onProgress?.({
+      phase,
+      processed,
+      total: totalEntries,
+      percent: Math.max(0, Math.min(100, percent)),
+      message,
+    });
+  };
+
+  const yieldToUi = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+  emitProgress("preparing", 0, 2, "Excel çıktısı hazırlanıyor...");
+
+  const wb = new ExcelJS.Workbook();
+  const usedSheetNames = new Set<string>();
+  const methodKeys: ExportMethodKey[] = ["M1", "M2", "M3", "M4", "M5", "M6", "M7"];
+  const methodColors: Record<ExportMethodKey, string> = {
+    M1: "#2563eb",
+    M2: "#16a34a",
+    M3: "#9333ea",
+    M4: "#ea580c",
+    M5: "#dc2626",
+    M6: "#4f46e5",
+    M7: "#0f766e",
+  };
+  const methodLabelOffsets: Record<
+    ExportMethodKey,
+    { dx: number; dy: number; anchor: "start" | "middle" | "end" }
+  > = {
+    M1: { dx: 6, dy: -8, anchor: "start" },
+    M2: { dx: 8, dy: 10, anchor: "start" },
+    M3: { dx: -8, dy: -8, anchor: "end" },
+    M4: { dx: -8, dy: 10, anchor: "end" },
+    M5: { dx: 0, dy: -11, anchor: "middle" },
+    M6: { dx: 0, dy: 13, anchor: "middle" },
+    M7: { dx: 10, dy: 0, anchor: "start" },
+  };
+
+  const makeSafeSheetName = (base: string): string => {
+    const sanitized = base.replace(/[*?:\\/\[\]]/g, "_");
+    return sanitized.substring(0, 31);
+  };
+
+  const getUniqueSheetName = (base: string): string => {
+    const initial = makeSafeSheetName(base);
+    if (!usedSheetNames.has(initial)) {
+      usedSheetNames.add(initial);
+      return initial;
+    }
+
+    let counter = 2;
+    while (counter < 1000) {
+      const suffix = `_${counter}`;
+      const trimmed = base.substring(0, Math.max(0, 31 - suffix.length));
+      const candidate = makeSafeSheetName(trimmed + suffix);
+      if (!usedSheetNames.has(candidate)) {
+        usedSheetNames.add(candidate);
+        return candidate;
+      }
+      counter++;
+    }
+
+    const fallback = `${initial.substring(0, 28)}_X`;
+    usedSheetNames.add(fallback);
+    return fallback;
+  };
+
+  const summaryRows: (string | number)[][] = [
+    [options.summaryTitle || "İstasyon / Derinlik Modu Excel Çıktısı"],
+    [""],
+    ["Toplam Kayıt", entries.length],
+    [""],
+    [
+      "İstasyon",
+      "Derinlik Modu",
+      "Hedef Derinlik (m)",
+      "M3 Derinlik Modu",
+      "H (m)",
+      "Vsa M1",
+      "Vsa M2",
+      "Vsa M3",
+      "Vsa M4",
+      "Vsa M5",
+      "Vsa M6",
+      "Vsa M7",
+      "Vsa Exact",
+      "Referans Exact",
+      "Yüksek Sapma Sayısı",
+    ],
+  ];
+
+  entries.forEach((entry) => {
+    summaryRows.push([
+      entry.stationName,
+      entry.modeLabel,
+      Number(entry.targetDepth.toFixed(2)),
+      entry.m3DepthMode,
+      Number(entry.result.H_used.toFixed(2)),
+      Number(entry.result.Vsa_M1.toFixed(1)),
+      Number(entry.result.Vsa_M2.toFixed(1)),
+      Number(entry.result.Vsa_M3.toFixed(1)),
+      Number(entry.result.Vsa_M4.toFixed(1)),
+      entry.result.Vsa_M5 != null ? Number(entry.result.Vsa_M5.toFixed(1)) : "—",
+      entry.result.Vsa_M6 != null ? Number(entry.result.Vsa_M6.toFixed(1)) : "—",
+      entry.result.Vsa_M7 != null ? Number(entry.result.Vsa_M7.toFixed(1)) : "—",
+      entry.result.Vsa_Exact != null
+        ? Number(entry.result.Vsa_Exact.toFixed(1))
+        : "—",
+      entry.exactReference != null ? Number(entry.exactReference.toFixed(1)) : "—",
+      entry.highDeviationMethods.length,
+    ]);
+  });
+
+  const summaryWs = wb.addWorksheet("Özet");
+  summaryRows.forEach((row) => summaryWs.addRow(row));
+  [28, 24, 14, 16, 10, 10, 10, 10, 10, 10, 10, 10, 10, 14, 14].forEach(
+    (w, idx) => {
+      summaryWs.getColumn(idx + 1).width = w;
+    },
+  );
+
+  emitProgress(
+    "preparing",
+    0,
+    10,
+    `Özet sayfası oluşturuldu (${totalEntries} kayıt).`,
+  );
+
+  const createDeviationChartDataUrl = (
+    entry: StationModeExcelEntry,
+  ): string | null => {
+    if (typeof document === "undefined") return null;
+
+    const cardWidth = 980;
+    const cardHeight = 560;
+    const scale = 2;
+
+    const chartWidth = 900;
+    const chartHeight = 360;
+    const chartX = 40;
+    const chartY = 115;
+
+    const margin = { top: 20, right: 20, bottom: 90, left: 55 };
+    const plotWidth = chartWidth - margin.left - margin.right;
+    const plotHeight = chartHeight - margin.top - margin.bottom;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = cardWidth * scale;
+    canvas.height = cardHeight * scale;
+    canvas.style.width = `${cardWidth}px`;
+    canvas.style.height = `${cardHeight}px`;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.scale(scale, scale);
+
+    const points = methodKeys
+      .map((key) => ({ key, value: entry.deviations[key] }))
+      .filter((row): row is { key: ExportMethodKey; value: number } =>
+        row.value != null && Number.isFinite(row.value),
+      );
+
+    if (!points.length) return null;
+
+    const allValues = points.map((point) => point.value);
+    const valueMin = Math.min(0, ...allValues);
+    const valueMax = Math.max(0, ...allValues);
+    const padding = Math.max(5, (valueMax - valueMin) * 0.15);
+    const yMin = valueMin - padding;
+    const yMax = valueMax + padding;
+
+    const x = (idx: number) => {
+      if (points.length <= 1) return chartX + margin.left + plotWidth / 2;
+      return chartX + margin.left + (idx / (points.length - 1)) * plotWidth;
+    };
+
+    const y = (value: number) => {
+      const ratio = (value - yMin) / (yMax - yMin || 1);
+      return chartY + margin.top + (1 - ratio) * plotHeight;
+    };
+
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, cardWidth, cardHeight);
+
+    ctx.font = "600 18px Arial";
+    ctx.fillStyle = "#111827";
+    ctx.fillText(`${entry.stationName} — ${entry.modeLabel}`, 20, 30);
+
+    ctx.font = "12px Arial";
+    ctx.fillStyle = "#6b7280";
+    ctx.fillText(
+      "Yatay referans çizgisi Exact’e göre %0 sapmayı gösterir. Noktalar M1–M7 yöntemlerinin Exact’e göre sapma (%) değerleridir.",
+      20,
+      52,
+    );
+
+    let legendX = 20;
+    const legendY = 76;
+    ctx.font = "12px Arial";
+    methodKeys.forEach((key) => {
+      ctx.fillStyle = methodColors[key];
+      ctx.beginPath();
+      ctx.arc(legendX + 6, legendY - 4, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#111827";
+      ctx.fillText(key, legendX + 16, legendY);
+      legendX += 54;
+    });
+
+    ctx.strokeStyle = "#e5e7eb";
+    ctx.lineWidth = 1;
+    const radius = 6;
+    ctx.beginPath();
+    ctx.moveTo(chartX + radius, chartY);
+    ctx.lineTo(chartX + chartWidth - radius, chartY);
+    ctx.quadraticCurveTo(
+      chartX + chartWidth,
+      chartY,
+      chartX + chartWidth,
+      chartY + radius,
+    );
+    ctx.lineTo(chartX + chartWidth, chartY + chartHeight - radius);
+    ctx.quadraticCurveTo(
+      chartX + chartWidth,
+      chartY + chartHeight,
+      chartX + chartWidth - radius,
+      chartY + chartHeight,
+    );
+    ctx.lineTo(chartX + radius, chartY + chartHeight);
+    ctx.quadraticCurveTo(chartX, chartY + chartHeight, chartX, chartY + chartHeight - radius);
+    ctx.lineTo(chartX, chartY + radius);
+    ctx.quadraticCurveTo(chartX, chartY, chartX + radius, chartY);
+    ctx.stroke();
+
+    const tickCount = 6;
+    ctx.strokeStyle = "#e5e7eb";
+    ctx.lineWidth = 1;
+    ctx.font = "10px Arial";
+    for (let i = 0; i <= tickCount; i++) {
+      const value = yMin + (i / tickCount) * (yMax - yMin);
+      const yy = y(value);
+      ctx.beginPath();
+      ctx.moveTo(chartX + margin.left, yy);
+      ctx.lineTo(chartX + chartWidth - margin.right, yy);
+      ctx.stroke();
+      ctx.fillStyle = "#6b7280";
+      ctx.textAlign = "right";
+      ctx.fillText(`${value.toFixed(0)}%`, chartX + margin.left - 8, yy + 4);
+      ctx.textAlign = "start";
+    }
+
+    const zeroY = y(0);
+    ctx.strokeStyle = "#dc2626";
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([5, 4]);
+    ctx.beginPath();
+    ctx.moveTo(chartX + margin.left, zeroY);
+    ctx.lineTo(chartX + chartWidth - margin.right, zeroY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.fillStyle = "#991b1b";
+    ctx.textAlign = "end";
+    ctx.fillText("Exact (%0)", chartX + chartWidth - margin.right - 4, zeroY - 6);
+    ctx.textAlign = "start";
+
+    const stationX = x(0);
+    ctx.strokeStyle = "#f3f4f6";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(stationX, chartY + margin.top);
+    ctx.lineTo(stationX, chartY + margin.top + plotHeight);
+    ctx.stroke();
+
+    ctx.save();
+    ctx.translate(stationX, chartY + chartHeight - margin.bottom + 10);
+    ctx.rotate((60 * Math.PI) / 180);
+    ctx.fillStyle = "#6b7280";
+    ctx.font = "10px Arial";
+    ctx.fillText("1", 0, 0);
+    ctx.restore();
+
+    methodKeys.forEach((key, methodIndex) => {
+      const value = entry.deviations[key];
+      if (value == null || !Number.isFinite(value)) return;
+
+      const xx = stationX + (methodIndex - 3) * 1.7;
+      const yy = y(value);
+      const color = methodColors[key];
+      const labelOffset = methodLabelOffsets[key];
+
+      ctx.fillStyle = color;
+      ctx.globalAlpha = 0.9;
+      ctx.beginPath();
+      ctx.arc(xx, yy, 3.3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+
+      ctx.font = "9px Arial";
+      ctx.fillStyle = "#374151";
+      ctx.textAlign =
+        labelOffset.anchor === "start"
+          ? "left"
+          : labelOffset.anchor === "end"
+            ? "right"
+            : "center";
+      ctx.fillText(key, xx + labelOffset.dx, yy + labelOffset.dy);
+      ctx.textAlign = "start";
+    });
+
+    ctx.fillStyle = "#6b7280";
+    ctx.font = "11px Arial";
+    ctx.fillText(
+      "Bu grafik yalnızca seçili istasyonun yöntem sapmalarını gösterir.",
+      chartX,
+      chartY + chartHeight + 22,
+    );
+
+    ctx.strokeStyle = "#e5e7eb";
+    ctx.strokeRect(chartX, chartY + chartHeight + 30, chartWidth, 42);
+    ctx.fillStyle = "#374151";
+    ctx.font = "11px Arial";
+    ctx.fillText(`1. ${entry.stationName}`, chartX + 10, chartY + chartHeight + 56);
+
+    return canvas.toDataURL("image/png");
+  };
+
+  for (let entryIndex = 0; entryIndex < entries.length; entryIndex++) {
+    const entry = entries[entryIndex];
+    const detailRows: (string | number)[][] = [
+      [`${entry.stationName} — ${entry.modeLabel}`],
+      [""],
+      ["Meta"],
+      ["İstasyon", entry.stationName],
+      ["Derinlik Modu", entry.modeLabel],
+      ["Hedef Derinlik (m)", Number(entry.targetDepth.toFixed(2))],
+      ["M3 Derinlik Modu", entry.m3DepthMode],
+      ["M3 Formül", entry.method],
+      ["Varsayılan Yoğunluk (kg/m³)", entry.defaultRho],
+      ...(entry.h800Summary ? [["VS_H Özeti", entry.h800Summary]] : []),
+      [""],
+      ["Katman Verileri"],
+      ["Katman", "Kalınlık (m)", "Vs (m/s)", "Vp (m/s)", "ρ (kg/m³)", "Kümülatif Derinlik (m)"],
+    ];
+
+    let cumulativeDepth = 0;
+    entry.layers.forEach((layer, index) => {
+      const thickness = typeof layer.d === "number" ? layer.d : 0;
+      cumulativeDepth += thickness;
+      detailRows.push([
+        layer.id || String(index + 1),
+        Number(thickness.toFixed(2)),
+        typeof layer.vs === "number" ? Number(layer.vs.toFixed(1)) : "—",
+        typeof layer.vp === "number" ? Number(layer.vp.toFixed(1)) : "—",
+        typeof layer.rho === "number" ? Number(layer.rho.toFixed(1)) : entry.defaultRho,
+        Number(cumulativeDepth.toFixed(2)),
+      ]);
+    });
+
+    detailRows.push([""]);
+    detailRows.push(["Formül Sonuçları"]);
+    detailRows.push(["Parametre", "Değer", "Birim"]);
+    detailRows.push(["H (kullanılan)", Number(entry.result.H_used.toFixed(2)), "m"]);
+    detailRows.push(["Vsa M1", Number(entry.result.Vsa_M1.toFixed(1)), "m/s"]);
+    detailRows.push(["Vsa M2", Number(entry.result.Vsa_M2.toFixed(1)), "m/s"]);
+    detailRows.push(["Vsa M3", Number(entry.result.Vsa_M3.toFixed(1)), "m/s"]);
+    detailRows.push(["Vsa M4", Number(entry.result.Vsa_M4.toFixed(1)), "m/s"]);
+    detailRows.push([
+      "Vsa M5",
+      entry.result.Vsa_M5 != null ? Number(entry.result.Vsa_M5.toFixed(1)) : "—",
+      "m/s",
+    ]);
+    detailRows.push([
+      "Vsa M6",
+      entry.result.Vsa_M6 != null ? Number(entry.result.Vsa_M6.toFixed(1)) : "—",
+      "m/s",
+    ]);
+    detailRows.push([
+      "Vsa M7",
+      entry.result.Vsa_M7 != null ? Number(entry.result.Vsa_M7.toFixed(1)) : "—",
+      "m/s",
+    ]);
+    detailRows.push([
+      "Vsa Exact",
+      entry.result.Vsa_Exact != null ? Number(entry.result.Vsa_Exact.toFixed(1)) : "—",
+      "m/s",
+    ]);
+    detailRows.push([
+      "Referans Exact",
+      entry.exactReference != null ? Number(entry.exactReference.toFixed(1)) : "—",
+      "m/s",
+    ]);
+
+    detailRows.push([""]);
+    detailRows.push(["Sapma Analizi (Exact Referansa Göre)"]);
+    detailRows.push(["Yöntem", "Sapma (%)", "Durum"]);
+    methodKeys.forEach((key) => {
+      const value = entry.deviations[key];
+      const status =
+        value == null
+          ? "Hesaplanamadı"
+          : Math.abs(value) <= 10
+            ? "±%10 içinde"
+            : "%10'dan fazla sapma";
+      detailRows.push([
+        key,
+        value != null ? Number(value.toFixed(2)) : "—",
+        status,
+      ]);
+    });
+    detailRows.push(["Yüksek Sapma Var mı?", entry.needsNarrowing ? "Evet" : "Hayır"]);
+    detailRows.push([
+      "Yüksek Sapmalı Yöntemler",
+      entry.highDeviationMethods.length ? entry.highDeviationMethods.join(", ") : "—",
+    ]);
+
+    detailRows.push([""]);
+
+    const sheetName = getUniqueSheetName(`${entry.stationName}_${entry.modeKey}`);
+    const ws = wb.addWorksheet(sheetName);
+    detailRows.forEach((row) => ws.addRow(row));
+    [34, 20, 42, 14, 16, 22].forEach((w, idx) => {
+      ws.getColumn(idx + 1).width = w;
+    });
+
+    const chartDataUrl = createDeviationChartDataUrl(entry);
+    if (chartDataUrl) {
+      const base64 = chartDataUrl.split(",")[1];
+      const imageId = wb.addImage({
+        base64,
+        extension: "png",
+      });
+
+      const chartLabelRow = detailRows.length + 2;
+      ws.addRow(["Görsel Grafik (Siteye Benzer)"]);
+      ws.addImage(imageId, {
+        tl: { col: 0, row: chartLabelRow },
+        ext: { width: 980, height: 360 },
+      });
+      ws.getRow(chartLabelRow + 1).height = 270;
+    }
+    const renderedPercent = 10 + ((entryIndex + 1) / totalEntries) * 78;
+    emitProgress(
+      "rendering",
+      entryIndex + 1,
+      renderedPercent,
+      `${entry.stationName} (${entry.modeLabel}) işleniyor...`,
+    );
+
+    if ((entryIndex + 1) % 2 === 0) {
+      await yieldToUi();
+    }
+  }
+
+  emitProgress("writing", totalEntries, 92, "Excel dosyası yazılıyor...");
+
+  const excelBuffer = await wb.xlsx.writeBuffer();
+  const blob = new Blob([excelBuffer], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+
+  const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, "-");
+  const prefix = options.filePrefix || "istasyon-mod-cikti";
+  saveAs(blob, `${prefix}-${timestamp}.xlsx`);
+  emitProgress("done", totalEntries, 100, "İndirme tamamlandı.");
 }
 
 /**

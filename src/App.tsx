@@ -13,10 +13,13 @@ import { getCombinedPresets } from "./excelPresets";
 import {
   readExcelFile,
   exportToExcel,
+  exportStationModeExcel,
   downloadSampleExcel,
   createFileInput,
   type ExcelData,
   type ExcelMeasurement,
+  type StationModeExcelEntry,
+  type StationModeExcelExportProgress,
 } from "./lib/excelUtils";
 import "./App.css";
 
@@ -265,6 +268,12 @@ function App() {
   >([]);
   const [currentMeasurementIndex, setCurrentMeasurementIndex] =
     useState<number>(0);
+  const [exportUi, setExportUi] = useState<{
+    active: boolean;
+    percent: number;
+    message: string;
+  }>({ active: false, percent: 0, message: "" });
+  const [isStationExporting, setIsStationExporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const formatPresetLabel = (name: string) =>
@@ -331,6 +340,7 @@ function App() {
       return {
         siteHs: [] as StationDeviationRow[],
         vs30: [] as StationDeviationRow[],
+        custom: [] as StationDeviationRow[],
       };
     }
 
@@ -374,8 +384,36 @@ function App() {
     return {
       siteHs: computeForMode(Number.POSITIVE_INFINITY, "TOTAL"),
       vs30: computeForMode(30, "TARGET"),
+      custom: computeForMode(Math.max(1, Number(customDepth) || 30), "TARGET"),
     };
-  }, [currentPreset, isDotPreset]);
+  }, [currentPreset, isDotPreset, customDepth]);
+
+  const activeChart = useMemo(() => {
+    if (!currentPreset || depthMode === "VS_H") return null;
+
+    if (depthMode === "SITE_HS") {
+      return {
+        title: `Seçili İstasyon — SITE_HS (Exact Referanslı Sapma): ${currentPreset.name}`,
+        rows: stationComparisonData.siteHs,
+      };
+    }
+
+    if (depthMode === "VS30") {
+      return {
+        title: `Seçili İstasyon — VS30 (Exact Referanslı Sapma): ${currentPreset.name}`,
+        rows: stationComparisonData.vs30,
+      };
+    }
+
+    if (depthMode === "CUSTOM") {
+      return {
+        title: `Seçili İstasyon — CUSTOM (${Math.max(1, Number(customDepth) || 30)} m) (Exact Referanslı Sapma): ${currentPreset.name}`,
+        rows: stationComparisonData.custom,
+      };
+    }
+
+    return null;
+  }, [currentPreset, depthMode, stationComparisonData, customDepth]);
 
   // Sapma analizi
   useEffect(() => {
@@ -775,6 +813,225 @@ function App() {
     );
   };
 
+  const toDeviation = (calc: number | null | undefined, exact: number) => {
+    if (calc == null || !Number.isFinite(calc) || exact <= 0) return null;
+    return ((calc - exact) / exact) * 100;
+  };
+
+  const buildStationModeEntry = (
+    preset: Preset,
+    mode: DepthMode,
+  ): StationModeExcelEntry | null => {
+    const dotPreset = preset.name.trim().startsWith("●");
+    const hInfo = computeReferenceVsAndPeriod(preset.layers);
+
+    let target = Number.POSITIVE_INFINITY;
+    let m3DepthMode: "TOTAL" | "TARGET" = "TOTAL";
+    let modeLabel = "SITE_HS (Tüm Profil)";
+
+    if (mode === "VS30") {
+      target = 30;
+      m3DepthMode = "TARGET";
+      modeLabel = "VS30 (30 m)";
+    } else if (mode === "VS_H") {
+      target = hInfo?.hRef ?? 0;
+      m3DepthMode = "TARGET";
+      modeLabel = "VS_H (H800)";
+      if (!(target > 0)) return null;
+    } else if (mode === "CUSTOM") {
+      target = Math.max(1, Number(customDepth) || 30);
+      m3DepthMode = "TARGET";
+      modeLabel = `CUSTOM (${target} m)`;
+    }
+
+    const computed = computeResults(
+      preset.layers,
+      preset.defaultRho,
+      target,
+      target,
+      m3DepthMode,
+      "MOC",
+    );
+
+    if (!computed) return null;
+
+    const exactReference =
+      (dotPreset ? undefined : preset.expected?.Exact) ?? computed.Vsa_Exact;
+
+    const deviations = {
+      M1: exactReference ? toDeviation(computed.Vsa_M1, exactReference) : null,
+      M2: exactReference ? toDeviation(computed.Vsa_M2, exactReference) : null,
+      M3: exactReference ? toDeviation(computed.Vsa_M3, exactReference) : null,
+      M4: exactReference ? toDeviation(computed.Vsa_M4, exactReference) : null,
+      M5: exactReference ? toDeviation(computed.Vsa_M5, exactReference) : null,
+      M6: exactReference ? toDeviation(computed.Vsa_M6, exactReference) : null,
+      M7: exactReference ? toDeviation(computed.Vsa_M7, exactReference) : null,
+    };
+
+    const highDeviationMethods = (Object.entries(deviations) as Array<
+      [keyof typeof deviations, number | null]
+    >)
+      .filter(([, value]) => value != null && Math.abs(value) > 10)
+      .map(([key]) => key);
+
+    const h800Summary = (() => {
+      if (mode !== "VS_H" || !hInfo) return undefined;
+      const h800Text =
+        hInfo.h800 != null
+          ? `${hInfo.h800.toFixed(2)} m`
+          : "ölçümle kanıtlanamadı";
+      return `H800=${h800Text}; hVs=${hInfo.hVsUsed.toFixed(2)} m; vs,H=${hInfo.vsRef.toFixed(1)} m/s; Matris=${hInfo.matrixClass}`;
+    })();
+
+    return {
+      stationName: formatPresetLabel(preset.name),
+      modeKey: mode,
+      modeLabel,
+      targetDepth: Number.isFinite(target) ? target : computeH(preset.layers),
+      m3DepthMode,
+      method: "MOC",
+      defaultRho: preset.defaultRho,
+      layers: preset.layers,
+      result: computed,
+      exactReference:
+        exactReference != null && Number.isFinite(exactReference)
+          ? exactReference
+          : null,
+      deviations,
+      highDeviationMethods,
+      needsNarrowing: highDeviationMethods.length > 0,
+      h800Summary,
+    };
+  };
+
+  const downloadSelectedStationSelectedModeExcel = async () => {
+    if (!currentPreset) return;
+    const entry = buildStationModeEntry(currentPreset, depthMode);
+    if (!entry) {
+      window.alert("Seçili istasyon ve mod için çıktı üretilemedi.");
+      return;
+    }
+    try {
+      setIsStationExporting(true);
+      setExportUi({
+        active: true,
+        percent: 0,
+        message: "Seçili istasyon + seçili mod için çıktı hazırlanıyor...",
+      });
+      await exportStationModeExcel([entry], {
+        filePrefix: "secili-istasyon-secili-mod",
+        summaryTitle: "Seçili İstasyon + Seçili Mod",
+        onProgress: (progress: StationModeExcelExportProgress) => {
+          setExportUi({
+            active: true,
+            percent: Math.round(progress.percent),
+            message: progress.message,
+          });
+        },
+      });
+      setExportUi({ active: true, percent: 100, message: "İndirme tamamlandı." });
+      setTimeout(() => {
+        setExportUi({ active: false, percent: 0, message: "" });
+      }, 1500);
+    } catch (error) {
+      console.error(error);
+      window.alert("Excel çıktısı oluşturulurken hata oluştu.");
+      setExportUi({ active: false, percent: 0, message: "" });
+    } finally {
+      setIsStationExporting(false);
+    }
+  };
+
+  const downloadSelectedStationAllModesExcel = async () => {
+    if (!currentPreset) return;
+    const modes: DepthMode[] = ["SITE_HS", "VS30", "VS_H", "CUSTOM"];
+    const entries = modes
+      .map((mode) => buildStationModeEntry(currentPreset, mode))
+      .filter((entry): entry is StationModeExcelEntry => entry !== null);
+
+    if (!entries.length) {
+      window.alert("Seçili istasyon için mod çıktıları üretilemedi.");
+      return;
+    }
+
+    try {
+      setIsStationExporting(true);
+      setExportUi({
+        active: true,
+        percent: 0,
+        message: "Seçili istasyonun tüm modları hazırlanıyor...",
+      });
+      await exportStationModeExcel(entries, {
+        filePrefix: "secili-istasyon-tum-modlar",
+        summaryTitle: "Seçili İstasyon + Tüm Derinlik Modları",
+        onProgress: (progress: StationModeExcelExportProgress) => {
+          setExportUi({
+            active: true,
+            percent: Math.round(progress.percent),
+            message: progress.message,
+          });
+        },
+      });
+      setExportUi({ active: true, percent: 100, message: "İndirme tamamlandı." });
+      setTimeout(() => {
+        setExportUi({ active: false, percent: 0, message: "" });
+      }, 1500);
+    } catch (error) {
+      console.error(error);
+      window.alert("Excel çıktısı oluşturulurken hata oluştu.");
+      setExportUi({ active: false, percent: 0, message: "" });
+    } finally {
+      setIsStationExporting(false);
+    }
+  };
+
+  const downloadAllStationsAllModesExcel = async () => {
+    const modes: DepthMode[] = ["SITE_HS", "VS30", "VS_H", "CUSTOM"];
+    const entries: StationModeExcelEntry[] = [];
+
+    for (const preset of availablePresets) {
+      for (const mode of modes) {
+        const entry = buildStationModeEntry(preset, mode);
+        if (entry) entries.push(entry);
+      }
+    }
+
+    if (!entries.length) {
+      window.alert("İstasyon/mod kombinasyonları için çıktı üretilemedi.");
+      return;
+    }
+
+    try {
+      setIsStationExporting(true);
+      setExportUi({
+        active: true,
+        percent: 0,
+        message: `Tüm istasyonlar hazırlanıyor (${entries.length} kayıt)...`,
+      });
+      await exportStationModeExcel(entries, {
+        filePrefix: "tum-istasyonlar-tum-modlar",
+        summaryTitle: "Tüm İstasyonlar + Tüm Derinlik Modları",
+        onProgress: (progress: StationModeExcelExportProgress) => {
+          setExportUi({
+            active: true,
+            percent: Math.round(progress.percent),
+            message: `${progress.message} (${progress.processed}/${progress.total})`,
+          });
+        },
+      });
+      setExportUi({ active: true, percent: 100, message: "İndirme tamamlandı." });
+      setTimeout(() => {
+        setExportUi({ active: false, percent: 0, message: "" });
+      }, 1800);
+    } catch (error) {
+      console.error(error);
+      window.alert("Excel çıktısı oluşturulurken hata oluştu.");
+      setExportUi({ active: false, percent: 0, message: "" });
+    } finally {
+      setIsStationExporting(false);
+    }
+  };
+
   // useEffect: defaultRho değiştiğinde katmanları güncelle
   useEffect(() => {
     setLayers(
@@ -1166,7 +1423,7 @@ function App() {
           )}
 
           {/* Butonlar */}
-          <div className="mt-4 flex gap-2">
+          <div className="mt-4 flex flex-wrap gap-2">
             <button
               onClick={resetData}
               className="rounded bg-gray-500 px-4 py-2 text-white hover:bg-gray-600"
@@ -1179,7 +1436,32 @@ function App() {
               disabled={excelMeasurements.length === 0 || excelLoading}
               className="rounded bg-orange-600 px-4 py-2 text-white hover:bg-orange-700 disabled:opacity-50"
             >
-              Excel İndir
+              Yüklenen Excel Ölçümlerini İndir
+            </button>
+            {currentPreset && (
+              <>
+                <button
+                  onClick={downloadSelectedStationSelectedModeExcel}
+                  disabled={isStationExporting}
+                  className="rounded bg-emerald-600 px-4 py-2 text-white hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  Seçili İstasyon + Seçili Mod
+                </button>
+                <button
+                  onClick={downloadSelectedStationAllModesExcel}
+                  disabled={isStationExporting}
+                  className="rounded bg-cyan-600 px-4 py-2 text-white hover:bg-cyan-700 disabled:opacity-50"
+                >
+                  Seçili İstasyon + Tüm Modlar
+                </button>
+              </>
+            )}
+            <button
+              onClick={downloadAllStationsAllModesExcel}
+              disabled={isStationExporting}
+              className="rounded bg-sky-700 px-4 py-2 text-white hover:bg-sky-800 disabled:opacity-50"
+            >
+              Tüm İstasyonlar + Tüm Modlar
             </button>
             {currentPreset && (
               <button
@@ -1191,6 +1473,21 @@ function App() {
               </button>
             )}
           </div>
+
+          {exportUi.active && (
+            <div className="mt-3 rounded-lg border border-sky-200 bg-sky-50 p-3">
+              <div className="mb-1 flex items-center justify-between text-sm text-sky-900">
+                <span>{exportUi.message}</span>
+                <span className="font-semibold">%{exportUi.percent}</span>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded bg-sky-100">
+                <div
+                  className="h-full rounded bg-sky-600 transition-all duration-300"
+                  style={{ width: `${Math.max(0, Math.min(100, exportUi.percent))}%` }}
+                />
+              </div>
+            </div>
+          )}
         </section>
 
         {/* Sonuçlar */}
@@ -1428,18 +1725,7 @@ function App() {
           </section>
         )}
 
-        {currentPreset && depthMode !== "VS_H" && (
-          <>
-            <StationComparisonChart
-              title={`Seçili İstasyon — SITE_HS (Exact Referanslı Sapma): ${currentPreset.name}`}
-              rows={stationComparisonData.siteHs}
-            />
-            <StationComparisonChart
-              title={`Seçili İstasyon — VS30 (Exact Referanslı Sapma): ${currentPreset.name}`}
-              rows={stationComparisonData.vs30}
-            />
-          </>
-        )}
+        {activeChart && <StationComparisonChart title={activeChart.title} rows={activeChart.rows} />}
 
         {/* Excel Format Bilgisi */}
         <section className="mb-6 rounded-lg bg-white p-6 shadow-sm">
