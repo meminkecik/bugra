@@ -868,9 +868,11 @@ function App() {
       M7: exactReference ? toDeviation(computed.Vsa_M7, exactReference) : null,
     };
 
-    const highDeviationMethods = (Object.entries(deviations) as Array<
-      [keyof typeof deviations, number | null]
-    >)
+    const highDeviationMethods = (
+      Object.entries(deviations) as Array<
+        [keyof typeof deviations, number | null]
+      >
+    )
       .filter(([, value]) => value != null && Math.abs(value) > 10)
       .map(([key]) => key);
 
@@ -929,7 +931,11 @@ function App() {
           });
         },
       });
-      setExportUi({ active: true, percent: 100, message: "İndirme tamamlandı." });
+      setExportUi({
+        active: true,
+        percent: 100,
+        message: "İndirme tamamlandı.",
+      });
       setTimeout(() => {
         setExportUi({ active: false, percent: 0, message: "" });
       }, 1500);
@@ -972,7 +978,11 @@ function App() {
           });
         },
       });
-      setExportUi({ active: true, percent: 100, message: "İndirme tamamlandı." });
+      setExportUi({
+        active: true,
+        percent: 100,
+        message: "İndirme tamamlandı.",
+      });
       setTimeout(() => {
         setExportUi({ active: false, percent: 0, message: "" });
       }, 1500);
@@ -1019,7 +1029,11 @@ function App() {
           });
         },
       });
-      setExportUi({ active: true, percent: 100, message: "İndirme tamamlandı." });
+      setExportUi({
+        active: true,
+        percent: 100,
+        message: "İndirme tamamlandı.",
+      });
       setTimeout(() => {
         setExportUi({ active: false, percent: 0, message: "" });
       }, 1800);
@@ -1483,7 +1497,9 @@ function App() {
               <div className="h-2 w-full overflow-hidden rounded bg-sky-100">
                 <div
                   className="h-full rounded bg-sky-600 transition-all duration-300"
-                  style={{ width: `${Math.max(0, Math.min(100, exportUi.percent))}%` }}
+                  style={{
+                    width: `${Math.max(0, Math.min(100, exportUi.percent))}%`,
+                  }}
                 />
               </div>
             </div>
@@ -1725,7 +1741,12 @@ function App() {
           </section>
         )}
 
-        {activeChart && <StationComparisonChart title={activeChart.title} rows={activeChart.rows} />}
+        {activeChart && (
+          <StationComparisonChart
+            title={activeChart.title}
+            rows={activeChart.rows}
+          />
+        )}
 
         {/* Excel Format Bilgisi */}
         <section className="mb-6 rounded-lg bg-white p-6 shadow-sm">

@@ -1084,13 +1084,22 @@ export async function exportStationModeExcel(
     });
   };
 
-  const yieldToUi = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+  const yieldToUi = () =>
+    new Promise<void>((resolve) => setTimeout(resolve, 0));
 
   emitProgress("preparing", 0, 2, "Excel çıktısı hazırlanıyor...");
 
   const wb = new ExcelJS.Workbook();
   const usedSheetNames = new Set<string>();
-  const methodKeys: ExportMethodKey[] = ["M1", "M2", "M3", "M4", "M5", "M6", "M7"];
+  const methodKeys: ExportMethodKey[] = [
+    "M1",
+    "M2",
+    "M3",
+    "M4",
+    "M5",
+    "M6",
+    "M7",
+  ];
   const methodColors: Record<ExportMethodKey, string> = {
     M1: "#2563eb",
     M2: "#16a34a",
@@ -1177,13 +1186,21 @@ export async function exportStationModeExcel(
       Number(entry.result.Vsa_M2.toFixed(1)),
       Number(entry.result.Vsa_M3.toFixed(1)),
       Number(entry.result.Vsa_M4.toFixed(1)),
-      entry.result.Vsa_M5 != null ? Number(entry.result.Vsa_M5.toFixed(1)) : "—",
-      entry.result.Vsa_M6 != null ? Number(entry.result.Vsa_M6.toFixed(1)) : "—",
-      entry.result.Vsa_M7 != null ? Number(entry.result.Vsa_M7.toFixed(1)) : "—",
+      entry.result.Vsa_M5 != null
+        ? Number(entry.result.Vsa_M5.toFixed(1))
+        : "—",
+      entry.result.Vsa_M6 != null
+        ? Number(entry.result.Vsa_M6.toFixed(1))
+        : "—",
+      entry.result.Vsa_M7 != null
+        ? Number(entry.result.Vsa_M7.toFixed(1))
+        : "—",
       entry.result.Vsa_Exact != null
         ? Number(entry.result.Vsa_Exact.toFixed(1))
         : "—",
-      entry.exactReference != null ? Number(entry.exactReference.toFixed(1)) : "—",
+      entry.exactReference != null
+        ? Number(entry.exactReference.toFixed(1))
+        : "—",
       entry.highDeviationMethods.length,
     ]);
   });
@@ -1232,8 +1249,9 @@ export async function exportStationModeExcel(
 
     const points = methodKeys
       .map((key) => ({ key, value: entry.deviations[key] }))
-      .filter((row): row is { key: ExportMethodKey; value: number } =>
-        row.value != null && Number.isFinite(row.value),
+      .filter(
+        (row): row is { key: ExportMethodKey; value: number } =>
+          row.value != null && Number.isFinite(row.value),
       );
 
     if (!points.length) return null;
@@ -1303,7 +1321,12 @@ export async function exportStationModeExcel(
       chartY + chartHeight,
     );
     ctx.lineTo(chartX + radius, chartY + chartHeight);
-    ctx.quadraticCurveTo(chartX, chartY + chartHeight, chartX, chartY + chartHeight - radius);
+    ctx.quadraticCurveTo(
+      chartX,
+      chartY + chartHeight,
+      chartX,
+      chartY + chartHeight - radius,
+    );
     ctx.lineTo(chartX, chartY + radius);
     ctx.quadraticCurveTo(chartX, chartY, chartX + radius, chartY);
     ctx.stroke();
@@ -1337,7 +1360,11 @@ export async function exportStationModeExcel(
 
     ctx.fillStyle = "#991b1b";
     ctx.textAlign = "end";
-    ctx.fillText("Exact (%0)", chartX + chartWidth - margin.right - 4, zeroY - 6);
+    ctx.fillText(
+      "Exact (%0)",
+      chartX + chartWidth - margin.right - 4,
+      zeroY - 6,
+    );
     ctx.textAlign = "start";
 
     const stationX = x(0);
@@ -1396,7 +1423,11 @@ export async function exportStationModeExcel(
     ctx.strokeRect(chartX, chartY + chartHeight + 30, chartWidth, 42);
     ctx.fillStyle = "#374151";
     ctx.font = "11px Arial";
-    ctx.fillText(`1. ${entry.stationName}`, chartX + 10, chartY + chartHeight + 56);
+    ctx.fillText(
+      `1. ${entry.stationName}`,
+      chartX + 10,
+      chartY + chartHeight + 56,
+    );
 
     return canvas.toDataURL("image/png");
   };
@@ -1416,7 +1447,14 @@ export async function exportStationModeExcel(
       ...(entry.h800Summary ? [["VS_H Özeti", entry.h800Summary]] : []),
       [""],
       ["Katman Verileri"],
-      ["Katman", "Kalınlık (m)", "Vs (m/s)", "Vp (m/s)", "ρ (kg/m³)", "Kümülatif Derinlik (m)"],
+      [
+        "Katman",
+        "Kalınlık (m)",
+        "Vs (m/s)",
+        "Vp (m/s)",
+        "ρ (kg/m³)",
+        "Kümülatif Derinlik (m)",
+      ],
     ];
 
     let cumulativeDepth = 0;
@@ -1428,7 +1466,9 @@ export async function exportStationModeExcel(
         Number(thickness.toFixed(2)),
         typeof layer.vs === "number" ? Number(layer.vs.toFixed(1)) : "—",
         typeof layer.vp === "number" ? Number(layer.vp.toFixed(1)) : "—",
-        typeof layer.rho === "number" ? Number(layer.rho.toFixed(1)) : entry.defaultRho,
+        typeof layer.rho === "number"
+          ? Number(layer.rho.toFixed(1))
+          : entry.defaultRho,
         Number(cumulativeDepth.toFixed(2)),
       ]);
     });
@@ -1436,34 +1476,48 @@ export async function exportStationModeExcel(
     detailRows.push([""]);
     detailRows.push(["Formül Sonuçları"]);
     detailRows.push(["Parametre", "Değer", "Birim"]);
-    detailRows.push(["H (kullanılan)", Number(entry.result.H_used.toFixed(2)), "m"]);
+    detailRows.push([
+      "H (kullanılan)",
+      Number(entry.result.H_used.toFixed(2)),
+      "m",
+    ]);
     detailRows.push(["Vsa M1", Number(entry.result.Vsa_M1.toFixed(1)), "m/s"]);
     detailRows.push(["Vsa M2", Number(entry.result.Vsa_M2.toFixed(1)), "m/s"]);
     detailRows.push(["Vsa M3", Number(entry.result.Vsa_M3.toFixed(1)), "m/s"]);
     detailRows.push(["Vsa M4", Number(entry.result.Vsa_M4.toFixed(1)), "m/s"]);
     detailRows.push([
       "Vsa M5",
-      entry.result.Vsa_M5 != null ? Number(entry.result.Vsa_M5.toFixed(1)) : "—",
+      entry.result.Vsa_M5 != null
+        ? Number(entry.result.Vsa_M5.toFixed(1))
+        : "—",
       "m/s",
     ]);
     detailRows.push([
       "Vsa M6",
-      entry.result.Vsa_M6 != null ? Number(entry.result.Vsa_M6.toFixed(1)) : "—",
+      entry.result.Vsa_M6 != null
+        ? Number(entry.result.Vsa_M6.toFixed(1))
+        : "—",
       "m/s",
     ]);
     detailRows.push([
       "Vsa M7",
-      entry.result.Vsa_M7 != null ? Number(entry.result.Vsa_M7.toFixed(1)) : "—",
+      entry.result.Vsa_M7 != null
+        ? Number(entry.result.Vsa_M7.toFixed(1))
+        : "—",
       "m/s",
     ]);
     detailRows.push([
       "Vsa Exact",
-      entry.result.Vsa_Exact != null ? Number(entry.result.Vsa_Exact.toFixed(1)) : "—",
+      entry.result.Vsa_Exact != null
+        ? Number(entry.result.Vsa_Exact.toFixed(1))
+        : "—",
       "m/s",
     ]);
     detailRows.push([
       "Referans Exact",
-      entry.exactReference != null ? Number(entry.exactReference.toFixed(1)) : "—",
+      entry.exactReference != null
+        ? Number(entry.exactReference.toFixed(1))
+        : "—",
       "m/s",
     ]);
 
@@ -1484,15 +1538,22 @@ export async function exportStationModeExcel(
         status,
       ]);
     });
-    detailRows.push(["Yüksek Sapma Var mı?", entry.needsNarrowing ? "Evet" : "Hayır"]);
+    detailRows.push([
+      "Yüksek Sapma Var mı?",
+      entry.needsNarrowing ? "Evet" : "Hayır",
+    ]);
     detailRows.push([
       "Yüksek Sapmalı Yöntemler",
-      entry.highDeviationMethods.length ? entry.highDeviationMethods.join(", ") : "—",
+      entry.highDeviationMethods.length
+        ? entry.highDeviationMethods.join(", ")
+        : "—",
     ]);
 
     detailRows.push([""]);
 
-    const sheetName = getUniqueSheetName(`${entry.stationName}_${entry.modeKey}`);
+    const sheetName = getUniqueSheetName(
+      `${entry.stationName}_${entry.modeKey}`,
+    );
     const ws = wb.addWorksheet(sheetName);
     detailRows.forEach((row) => ws.addRow(row));
     [34, 20, 42, 14, 16, 22].forEach((w, idx) => {
