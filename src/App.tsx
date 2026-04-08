@@ -1911,14 +1911,13 @@ function App() {
             </div>
             <div>
               <strong>VS_H derinlik modu:</strong> Derinlik seçimi için önce
-              yüzeyden itibaren Vs≥800 m/s seviyesine ilk ulaşılan katmanın
-              bir üstüne kadar olan toplam derinlik H800 olarak belirlenir.
-              Eğer ölçümlerle H800 kanıtlanamazsa matriste H800&gt;100 varsayımı
+              yüzeyden itibaren Vs≥800 m/s seviyesine ilk ulaşılan katmanın bir
+              üstüne kadar olan toplam derinlik H800 olarak belirlenir. Eğer
+              ölçümlerle H800 kanıtlanamazsa matriste H800&gt;100 varsayımı
               yapılır; ancak vs,H formülünde toplam profil derinliği kullanılır.
-              H800 ölçülmüşse vs,H hesabı H800 derinliğine kadar olan tabakalarla
-              yapılır. Son
-              olarak (H800 derinlik sınıfı) × (vs,H rijitlik sınıfı) matris
-              kesişimi alınır.
+              H800 ölçülmüşse vs,H hesabı H800 derinliğine kadar olan
+              tabakalarla yapılır. Son olarak (H800 derinlik sınıfı) × (vs,H
+              rijitlik sınıfı) matris kesişimi alınır.
             </div>
             <div>
               <strong>ASWV–FSP:</strong> Vsa = 4H / T - Ortalama kesme dalga
