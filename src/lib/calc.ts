@@ -483,8 +483,13 @@ function findDepthAtOrAboveVsThreshold(
   for (const L of layers) {
     if (typeof L.d !== "number" || typeof L.vs !== "number") return null;
     if (!(L.d > 0) || !(L.vs > 0)) return null;
-    depth += L.d;
+
+    // Yeni kural:
+    // H800, Vs>=eşik olan katmanın kendisi dahil edilmeden,
+    // bir üst katmana kadar olan toplam derinliktir.
     if (L.vs >= thresholdVs) return depth;
+
+    depth += L.d;
   }
   return null;
 }
@@ -559,7 +564,7 @@ export function computeReferenceVsAndPeriod(layers: Layer[]): {
   const h800ForClass = h800 ?? assumedH800;
 
   const totalDepth = computeH(layers);
-  const hVsUsed = h800 == null ? totalDepth : Math.min(h800, 100);
+  const hVsUsed = h800 == null ? totalDepth : h800;
   const hRef = hVsUsed;
   const vsThresholdUsed = 800;
 
